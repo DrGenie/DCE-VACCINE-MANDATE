@@ -1090,11 +1090,12 @@ document.addEventListener("DOMContentLoaded", () => {
   initCharts();
   renderAll();
 });
-// ---------------------------------------------------------------------------
-// TAB NAVIGATION: wire top nav buttons to main view sections
-// ---------------------------------------------------------------------------
 
-function initTabs() {
+/* -----------------------------------------------------
+   NAVIGATION
+----------------------------------------------------- */
+
+function initNavigation() {
   const navItems = document.querySelectorAll(".nav-item[data-view]");
   const sections = document.querySelectorAll(".view-section");
 
@@ -1125,15 +1126,10 @@ function initTabs() {
 
   // Click handlers
   navItems.forEach((btn) => {
-    btn.addEventListener("click", () => {
+    btn.addEventListener("click", (e) => {
+      e.preventDefault();
       const view = btn.dataset.view;
       if (view) activateView(view);
     });
   });
 }
-
-// Ensure DOM is ready before wiring up tabs
-document.addEventListener("DOMContentLoaded", () => {
-  initTabs();
-});
-
