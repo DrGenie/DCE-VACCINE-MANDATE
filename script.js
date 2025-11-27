@@ -978,103 +978,115 @@ function renderAll() {
 }
 
 /* -----------------------------------------------------
-   NAVIGATION
+   NAVIGATION (tabs: sidebar -> main views)
 ----------------------------------------------------- */
 
 function initNavigation() {
-  const navItems = document.querySelectorAll(".nav-item[data-view]");
+  const navItems = document.querySelectorAll(".nav-item[data-target]");
   const sections = document.querySelectorAll(".view-section");
 
-  navItems.forEach((btn) => {
-    btn.addEventListener("click", () => {
-      const view = btn.dataset.view;
-      navItems.forEach((b) => b.classList.remove("active"));
-      btn.classList.add("active");
+  if (!navItems.length || !sections.length) return;
 
-      sections.forEach((sec) => {
-        if (sec.id === `view-${view}`) {
-          sec.classList.add("active");
-        } else {
-          sec.classList.remove("active");
-        }
-      });
+  const activateView = (targetId) => {
+    // Highlight active tab
+    navItems.forEach((btn) => {
+      btn.classList.toggle("active", btn.dataset.target === targetId);
+    });
+
+    // Show / hide sections
+    sections.forEach((sec) => {
+      sec.classList.toggle("active", sec.id === targetId);
+    });
+  };
+
+  // Initial view: current active tab or first tab
+  const activeNav = document.querySelector(".nav-item.active[data-target]");
+  const initialTarget =
+    (activeNav && activeNav.dataset.target) ||
+    (navItems[0] && navItems[0].dataset.target);
+
+  if (initialTarget) {
+    activateView(initialTarget);
+  }
+
+  // Click handlers
+  navItems.forEach((btn) => {
+    btn.addEventListener("click", (e) => {
+      e.preventDefault();
+      const targetId = btn.dataset.target;
+      if (targetId) activateView(targetId);
     });
   });
 }
 
 /* -----------------------------------------------------
-   BIND CONTROLS
+   CONTROLS (country, outbreak, design sliders)
 ----------------------------------------------------- */
 
-function bindSegmentedControl(containerSelector, stateKey, dataKey) {
-  const container = document.querySelector(containerSelector);
-  if (!container) return;
+function initControls() {
+  // Ensure exemptions baseline matches HTML ("med_only")
+  if (!appState.exemptions) appState.exemptions = "med_only";
+  if (appState.exemptions === "medical_only") appState.exemptions = "med_only";
 
-  const buttons = container.querySelectorAll(".segmented-item");
-  buttons.forEach((btn) => {
-    btn.addEventListener("click", () => {
-      const val = btn.dataset[dataKey];
-      if (val === undefined) return;
-      appState[stateKey] = val;
-
-      buttons.forEach((b) => b.classList.remove("active"));
-      btn.classList.add("active");
-
+  // Country select (AUS / ITA / FRA -> AU / IT / FR in state)
+  const countrySelect = document.getElementById("country-select");
+  if (countrySelect) {
+    countrySelect.addEventListener("change", () => {
+      const val = countrySelect.value;
+      if (val === "AUS") appState.country = "AU";
+      else if (val === "ITA") appState.country = "IT";
+      else if (val === "FRA") appState.country = "FR";
       renderAll();
     });
-  });
-}
+  }
 
-function initControls() {
-  // Country, outbreak, design attributes
-  bindSegmentedControl("#countryControl", "country", "country");
-  bindSegmentedControl("#outbreakControl", "outbreak", "outbreak");
-  bindSegmentedControl("#scopeControl", "scope", "scope");
-  bindSegmentedControl("#exemptionControl", "exemptions", "exemption");
-  bindSegmentedControl("#coverageControl", "coverage", "coverage");
+  // Helper for segmented controls using data-value
+  const wireSegmented = (id, stateKey) => {
+    const container = document.getElementById(id);
+    if (!container) return;
+    const buttons = container.querySelectorAll(".segmented-item");
+
+    buttons.forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const val = btn.dataset.value;
+        if (!val) return;
+
+        appState[stateKey] = val;
+
+        buttons.forEach((b) => b.classList.remove("active"));
+        btn.classList.add("active");
+
+        renderAll();
+      });
+    });
+  };
+
+  // Outbreak, scope, exemptions, coverage
+  wireSegmented("outbreak-toggle", "outbreak");       // mild / severe
+  wireSegmented("scope-control", "scope");            // high_risk / all_public
+  wireSegmented("exemption-control", "exemptions");   // med_only / med_relig / med_relig_personal
+  wireSegmented("coverage-control", "coverage");      // 50 / 70 / 90
 
   // Lives-saved slider
-  const livesSlider = document.getElementById("livesSlider");
+  const livesSlider = document.getElementById("lives-slider");
+  const livesValue = document.getElementById("lives-value");
   if (livesSlider) {
     livesSlider.addEventListener("input", () => {
       const raw = Number(livesSlider.value || 0);
       appState.livesSaved = raw;
-      const label = document.getElementById("livesValue");
-      if (label) label.textContent = `${raw}`;
+      if (livesValue) livesValue.textContent = String(raw);
       renderAll();
     });
   }
 
-  // Population / baseline coverage, if present
-  const popInput = document.getElementById("populationInput");
-  if (popInput) {
-    popInput.addEventListener("change", () => {
-      const val = Number(popInput.value || 0);
-      if (val > 0) appState.population = val;
-      renderAll();
-    });
+  // Run evaluation button
+  const evalBtn = document.getElementById("btn-run-evaluation");
+  if (evalBtn) {
+    evalBtn.addEventListener("click", renderAll);
   }
 
-  const baseCovInput = document.getElementById("baselineCoverageInput");
-  if (baseCovInput) {
-    baseCovInput.addEventListener("change", () => {
-      const val = Number(baseCovInput.value || 0) / 100;
-      if (val >= 0 && val <= 1) appState.baselineCoverage = val;
-      renderAll();
-    });
-  }
-
-  // Toggle for controversial costs (social / attrition)
-  const controversialToggle = document.getElementById("toggleControversialCosts");
-  if (controversialToggle) {
-    controversialToggle.addEventListener("change", () => {
-      appState.includeControversialCosts = controversialToggle.checked;
-      renderAll();
-    });
-  }
-
-  // Export button
-  const exportBtn = document.getElementById("exportBriefBtn");
+  // Export policy brief button
+  const exportBtn = document.getElementById("btn-export-brief");
   if (exportBtn) {
     exportBtn.addEventListener("click", exportPolicyBrief);
   }
@@ -1086,50 +1098,7 @@ function initControls() {
 
 document.addEventListener("DOMContentLoaded", () => {
   initNavigation();
-  // keep these only if they are defined later in the file:
-  if (typeof initControls === "function") initControls();
+  initControls();
   if (typeof initCharts === "function") initCharts();
   if (typeof renderAll === "function") renderAll();
 });
-
-/* -----------------------------------------------------
-   NAVIGATION (tabs: sidebar -> main views)
------------------------------------------------------ */
-
-function initNavigation() {
-  const navItems = document.querySelectorAll(".nav-item[data-target]");
-  const sections = document.querySelectorAll(".view-section");
-
-  if (!navItems.length || !sections.length) return;
-
-  const activateView = (targetId) => {
-    // highlight active tab
-    navItems.forEach((btn) => {
-      btn.classList.toggle("active", btn.dataset.target === targetId);
-    });
-
-    // show/hide sections
-    sections.forEach((sec) => {
-      sec.classList.toggle("active", sec.id === targetId);
-    });
-  };
-
-  // initial view: current active tab or first tab
-  const activeNav = document.querySelector(".nav-item.active[data-target]");
-  const initialTarget =
-    (activeNav && activeNav.dataset.target) ||
-    (navItems[0] && navItems[0].dataset.target);
-
-  if (initialTarget) {
-    activateView(initialTarget);
-  }
-
-  // click handlers
-  navItems.forEach((btn) => {
-    btn.addEventListener("click", (e) => {
-      e.preventDefault();
-      const targetId = btn.dataset.target;
-      if (targetId) activateView(targetId);
-    });
-  });
-}
