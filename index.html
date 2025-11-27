@@ -93,11 +93,11 @@
                       </div>
                       <div>
                         <dt>Outbreak</dt>
-                        <dd id="db-outbreak">Mild</dd>
+                        <dd id="db-outbreak">Mild outbreak</dd>
                       </div>
                       <div>
                         <dt>Population segment</dt>
-                        <dd id="db-segment">Full sample</dd>
+                        <dd id="db-segment">Full sample (MXL)</dd>
                       </div>
                     </dl>
                   </div>
@@ -151,6 +151,35 @@
                   <button id="btn-save-scenario" class="btn btn-outline">
                     Save scenario to compare
                   </button>
+                </div>
+
+                <!-- Saved scenarios summary (populated by JS) -->
+                <div id="saved-scenarios-container" class="saved-scenarios">
+                  <h3>Saved scenarios</h3>
+                  <p class="help-text">
+                    Use “Save scenario to compare” after running the evaluation. Saved scenarios
+                    are stored locally in this browser session for rapid policy discussions.
+                  </p>
+                  <div class="table-scroll">
+                    <table class="table">
+                      <thead>
+                        <tr>
+                          <th>Label</th>
+                          <th>Country</th>
+                          <th>Outbreak</th>
+                          <th>Scope</th>
+                          <th>Exemptions</th>
+                          <th>Coverage</th>
+                          <th>Lives saved</th>
+                          <th>Uptake</th>
+                          <th>Cost / QALY</th>
+                        </tr>
+                      </thead>
+                      <tbody id="saved-scenarios-table-body">
+                        <!-- JS injects rows -->
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
               </div>
             </section>
@@ -301,7 +330,7 @@
                     </button>
                     <button
                       class="segmented-item"
-                      data-value="med_religious"
+                      data-value="med_relig"
                     >
                       Medical + religious
                       <span class="help-text-inline">
@@ -311,7 +340,7 @@
                     </button>
                     <button
                       class="segmented-item"
-                      data-value="med_religious_personal"
+                      data-value="med_relig_personal"
                     >
                       Medical + religious + personal belief
                       <span class="help-text-inline">
@@ -531,11 +560,8 @@
                   <select id="benefit-metric-select" class="select">
                     <option value="A">A · Additional vaccinated</option>
                     <option value="B_static">B · Cases averted (static)</option>
-                    <option value="B_seir">B · Cases averted (SEIR)</option>
-                    <option value="B_longcovid">B · Long-COVID morbidity</option>
                     <option value="C">C · Hosp/ICU/deaths averted</option>
                     <option value="D">D · QALYs gained</option>
-                    <option value="E">E · DALYs averted</option>
                     <option value="F">F · Monetised benefits</option>
                     <option value="G">G · Equity-weighted benefits</option>
                   </select>
