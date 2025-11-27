@@ -1,1698 +1,1092 @@
-// script.js
-(() => {
-  "use strict";
+// =====================================================
+// VACCINE MANDATE DECISION-AID TOOL
+// Front-end logic (script.js)
+// =====================================================
 
-  // ---------------------------------------------------------------------------
-  // GLOBAL STATE & PLACEHOLDER DATA STRUCTURES
-  // ---------------------------------------------------------------------------
+/* -----------------------------------------------------
+   GLOBAL STATE
+----------------------------------------------------- */
 
-  const state = {
-    country: "Australia",
-    context: "mild",
-    benefitMetric: "A",
-    mandate: {
-      type: "soft",
-      targetGroup: "all_adults",
-      enforcementIntensity: 5,
-      incentives: 5,
-      exemptions: "balanced",
-      testingOption: "none",
+const appState = {
+  country: "AU", // AU, IT, FR
+  outbreak: "mild", // mild, severe
+  scope: "high_risk", // high_risk, all_public
+  exemptions: "medical_only", // medical_only, med_relig, med_relig_personal
+  coverage: "50", // "50", "70", "90"
+  livesSaved: 25, // per 100,000
+  benefitModel: "all", // UI can switch between definitions
+  epiModel: "static", // static, seir, longcovid (placeholder)
+  discountRate: 0.03,
+  population: 1_000_000,
+  baselineCoverage: 0.75,
+  valuePerQALY: 50_000,
+  vsl: 7_000_000,
+  includeControversialCosts: true
+};
+
+// Cache of latest results (used for export, charts, etc.)
+let latestResults = {
+  uptake: null,
+  benefits: null,
+  costs: null,
+  economics: null,
+  equity: null
+};
+
+/* -----------------------------------------------------
+   DCE DATA – MIXED LOGIT (MEAN COEFFICIENTS)
+   From Table 3 in your manuscript
+   - All coefficients in preference space
+----------------------------------------------------- */
+
+const MXL_COEFFS = {
+  AU: {
+    mild: {
+      ascPolicy: 0.464,
+      ascOptOut: -0.572,
+      betaScopeAll: -0.319,
+      betaExMedRel: -0.157,
+      betaExMedRelPers: -0.267,
+      betaCov70: 0.171,
+      betaCov90: 0.158,
+      betaLives: 0.072
     },
-    epi: {
-      population: 1_000_000,
-      baselineUptake: 0.7,
-      attackRate: 0.25,
-      r0: 4,
-      ve: 0.85,
-      ifr: 0.005,
-      hospRisk: 0.05,
-      icuRisk: 0.01,
+    severe: {
+      ascPolicy: 0.535,
+      ascOptOut: -0.694,
+      betaScopeAll: 0.19,
+      betaExMedRel: -0.181,
+      betaExMedRelPers: -0.305,
+      betaCov70: 0.371,
+      betaCov90: 0.398,
+      betaLives: 0.079
+    }
+  },
+  IT: {
+    mild: {
+      ascPolicy: 0.625,
+      ascOptOut: -0.238,
+      betaScopeAll: -0.276,
+      betaExMedRel: -0.176,
+      betaExMedRelPers: -0.289,
+      betaCov70: 0.185,
+      betaCov90: 0.148,
+      betaLives: 0.039
     },
-    econ: {
-      wtpQaly: 50_000,
-      discountRate: 0.03,
-      vsl: 7_000_000,
-      vsly: 250_000,
-      qalyLossDeath: 8,
-      qalyLossCase: 0.02,
+    severe: {
+      ascPolicy: 0.799,
+      ascOptOut: -0.463,
+      betaScopeAll: 0.174,
+      betaExMedRel: -0.178,
+      betaExMedRelPers: -0.207,
+      betaCov70: 0.305,
+      betaCov90: 0.515,
+      betaLives: 0.045
+    }
+  },
+  FR: {
+    mild: {
+      ascPolicy: 0.899,
+      ascOptOut: 0.307,
+      betaScopeAll: -0.16,
+      betaExMedRel: -0.121,
+      betaExMedRelPers: -0.124,
+      betaCov70: 0.232,
+      betaCov90: 0.264,
+      betaLives: 0.049
     },
-    psa: {
-      runs: 1000,
-      variationPct: 20,
-      results: null,
-    },
-    costs: {
-      policyDrafting: { active: true, value: 500_000 },
-      legalPrep: { active: true, value: 300_000 },
-      communications: { active: true, value: 800_000 },
-      itSystems: { active: true, value: 1_200_000 },
-      exemptionProcessing: { active: true, value: 400_000 },
-      enforcement: { active: true, value: 900_000 },
-      extraCapacity: { active: true, value: 1_500_000 },
-
-      managementTime: { active: true, value: 600_000 },
-      ptoVaccination: { active: true, value: 500_000 },
-      ptoSideEffects: { active: true, value: 400_000 },
-      recordKeeping: { active: true, value: 250_000 },
-      testingCosts: { active: true, value: 700_000 },
-      staffingDisruptions: { active: true, value: 800_000 },
-
-      vaccineProcurement: { active: true, value: 2_000_000 },
-      coldChain: { active: true, value: 500_000 },
-      logistics: { active: true, value: 600_000 },
-      vaccinators: { active: true, value: 800_000 },
-      trainingSupervision: { active: true, value: 300_000 },
-      capitalEquipment: { active: true, value: 400_000 },
-      utilitiesOverhead: { active: true, value: 350_000 },
-      wasteDisposal: { active: true, value: 150_000 },
-
-      trustErosion: { active: false, value: 0 },
-      polarisation: { active: false, value: 0 },
-      protests: { active: false, value: 0 },
-      unmetCare: { active: false, value: 0 },
-    },
-  };
-
-  // Placeholder DCE results: structure only. Replace with real estimates.
-  const dceResults = {
-    Australia: {
-      mild: {
-        // Example latent classes
-        latentClasses: [
-          {
-            name: "Mandate supporters",
-            share: 0.75,
-            // Placeholder intercept and weights – replace with MXL/LC estimates
-            baseIntercept: 0.7,
-            mandateIntensityWeight: 0.12,
-            incentiveWeight: 0.06,
-            enforcementWeight: 0.08,
-          },
-          {
-            name: "Mandate resisters",
-            share: 0.25,
-            baseIntercept: 0.3,
-            mandateIntensityWeight: 0.04,
-            incentiveWeight: 0.02,
-            enforcementWeight: -0.02,
-          },
-        ],
-      },
-      severe: {
-        latentClasses: [
-          {
-            name: "Mandate supporters",
-            share: 0.8,
-            baseIntercept: 0.8,
-            mandateIntensityWeight: 0.16,
-            incentiveWeight: 0.08,
-            enforcementWeight: 0.1,
-          },
-          {
-            name: "Mandate resisters",
-            share: 0.2,
-            baseIntercept: 0.4,
-            mandateIntensityWeight: 0.06,
-            incentiveWeight: 0.03,
-            enforcementWeight: 0,
-          },
-        ],
-      },
-    },
-    France: {
-      mild: {
-        latentClasses: [
-          {
-            name: "Mandate supporters",
-            share: 0.7,
-            baseIntercept: 0.65,
-            mandateIntensityWeight: 0.1,
-            incentiveWeight: 0.05,
-            enforcementWeight: 0.07,
-          },
-          {
-            name: "Mandate resisters",
-            share: 0.3,
-            baseIntercept: 0.28,
-            mandateIntensityWeight: 0.03,
-            incentiveWeight: 0.02,
-            enforcementWeight: -0.02,
-          },
-        ],
-      },
-      severe: {
-        latentClasses: [
-          {
-            name: "Mandate supporters",
-            share: 0.78,
-            baseIntercept: 0.75,
-            mandateIntensityWeight: 0.14,
-            incentiveWeight: 0.07,
-            enforcementWeight: 0.09,
-          },
-          {
-            name: "Mandate resisters",
-            share: 0.22,
-            baseIntercept: 0.35,
-            mandateIntensityWeight: 0.05,
-            incentiveWeight: 0.03,
-            enforcementWeight: 0,
-          },
-        ],
-      },
-    },
-    Italy: {
-      mild: {
-        latentClasses: [
-          {
-            name: "Mandate supporters",
-            share: 0.72,
-            baseIntercept: 0.68,
-            mandateIntensityWeight: 0.11,
-            incentiveWeight: 0.06,
-            enforcementWeight: 0.08,
-          },
-          {
-            name: "Mandate resisters",
-            share: 0.28,
-            baseIntercept: 0.3,
-            mandateIntensityWeight: 0.04,
-            incentiveWeight: 0.02,
-            enforcementWeight: -0.02,
-          },
-        ],
-      },
-      severe: {
-        latentClasses: [
-          {
-            name: "Mandate supporters",
-            share: 0.8,
-            baseIntercept: 0.78,
-            mandateIntensityWeight: 0.15,
-            incentiveWeight: 0.08,
-            enforcementWeight: 0.1,
-          },
-          {
-            name: "Mandate resisters",
-            share: 0.2,
-            baseIntercept: 0.38,
-            mandateIntensityWeight: 0.06,
-            incentiveWeight: 0.03,
-            enforcementWeight: 0,
-          },
-        ],
-      },
-    },
-  };
-
-  // Placeholder descriptive statistics – plug your own country-specific values
-  const descriptiveStats = {
-    Australia: {
-      overall: {
-        "Sample size (N)": 2000,
-        "Mean age (years)": 52.3,
-        "Female (%)": 0.51,
-        "University degree (%)": 0.38,
-        "High vaccine confidence (%)": 0.62,
-        "Left-of-centre political orientation (%)": 0.41,
-      },
-      mild: {
-        "Sample size (N)": 1000,
-        "Mean age (years)": 51.8,
-        "Female (%)": 0.52,
-      },
-      severe: {
-        "Sample size (N)": 1000,
-        "Mean age (years)": 52.8,
-        "Female (%)": 0.50,
-      },
-      classes: {
-        "Mandate supporters": {
-          "Class share (%)": 0.75,
-          "High vaccine confidence (%)": 0.82,
-        },
-        "Mandate resisters": {
-          "Class share (%)": 0.25,
-          "High vaccine confidence (%)": 0.12,
-        },
-      },
-    },
-    France: {
-      overall: {
-        "Sample size (N)": 2000,
-        "Mean age (years)": 49.1,
-        "Female (%)": 0.52,
-      },
-      mild: {
-        "Sample size (N)": 1000,
-      },
-      severe: {
-        "Sample size (N)": 1000,
-      },
-      classes: {
-        "Mandate supporters": {
-          "Class share (%)": 0.7,
-        },
-        "Mandate resisters": {
-          "Class share (%)": 0.3,
-        },
-      },
-    },
-    Italy: {
-      overall: {
-        "Sample size (N)": 2000,
-        "Mean age (years)": 50.2,
-        "Female (%)": 0.5,
-      },
-      mild: {
-        "Sample size (N)": 1000,
-      },
-      severe: {
-        "Sample size (N)": 1000,
-      },
-      classes: {
-        "Mandate supporters": {
-          "Class share (%)": 0.72,
-        },
-        "Mandate resisters": {
-          "Class share (%)": 0.28,
-        },
-      },
-    },
-  };
-
-  // Placeholder equity parameters (replace with SES/age-specific results)
-  const equityParams = {
-    subgroups: ["Low SES", "Middle SES", "High SES"],
-    weights: {
-      "Low SES": 1.3,
-      "Middle SES": 1.0,
-      "High SES": 0.8,
-    },
-    // Distribution of QALY gains will be derived proportional to weights by default
-  };
-
-  // ---------------------------------------------------------------------------
-  // DOM CACHE
-  // ---------------------------------------------------------------------------
-  const dom = {};
-
-  function cacheDom() {
-    dom.countrySelect = document.getElementById("country-select");
-    dom.contextSelect = document.getElementById("context-select");
-    dom.benefitMetricSelect = document.getElementById("benefit-metric-select");
-
-    dom.mandateTypeSelect = document.getElementById("mandate-type-select");
-    dom.targetGroupSelect = document.getElementById("target-group-select");
-    dom.enforcementRange = document.getElementById("enforcement-intensity-range");
-    dom.incentivesRange = document.getElementById("incentives-range");
-    dom.exemptionsSelect = document.getElementById("exemptions-select");
-    dom.testingOptionSelect = document.getElementById("testing-option-select");
-
-    dom.populationInput = document.getElementById("population-input");
-    dom.baselineUptakeInput = document.getElementById("baseline-uptake-input");
-    dom.attackRateInput = document.getElementById("attack-rate-input");
-    dom.r0Input = document.getElementById("r0-input");
-    dom.veInput = document.getElementById("ve-input");
-    dom.ifrInput = document.getElementById("ifr-input");
-    dom.hospRiskInput = document.getElementById("hosp-risk-input");
-    dom.icuRiskInput = document.getElementById("icu-risk-input");
-
-    dom.wtpInput = document.getElementById("wtp-input");
-    dom.discountRateInput = document.getElementById("discount-rate-input");
-    dom.vslInput = document.getElementById("vsl-input");
-    dom.vslyInput = document.getElementById("vsly-input");
-    dom.qalyLossDeathInput = document.getElementById("qaly-loss-death-input");
-    dom.qalyLossCaseInput = document.getElementById("qaly-loss-case-input");
-
-    dom.costToggles = document.querySelectorAll(".cost-toggle");
-    dom.costInputs = document.querySelectorAll(".cost-input");
-
-    dom.psaRunsInput = document.getElementById("psa-runs-input");
-    dom.psaVariationInput = document.getElementById("psa-variation-input");
-    dom.runPsaBtn = document.getElementById("run-psa-btn");
-    dom.psaStatus = document.getElementById("psa-status");
-
-    dom.kpiUptakePm = document.getElementById("kpi-uptake-pm");
-    dom.kpiUptakeDelta = document.getElementById("kpi-uptake-delta");
-    dom.kpiAdditionalVaccinated = document.getElementById("kpi-additional-vaccinated");
-    dom.kpiCasesAverted = document.getElementById("kpi-cases-averted");
-    dom.kpiQalysGained = document.getElementById("kpi-qalys-gained");
-    dom.kpiTotalCost = document.getElementById("kpi-total-cost");
-    dom.kpiNmb = document.getElementById("kpi-nmb");
-
-    dom.lcUptakeTableBody = document.getElementById("lc-uptake-table-body");
-
-    dom.tblCasesAverted = document.getElementById("tbl-cases-averted");
-    dom.tblHospAverted = document.getElementById("tbl-hosp-averted");
-    dom.tblIcuAverted = document.getElementById("tbl-icu-averted");
-    dom.tblDeathsAverted = document.getElementById("tbl-deaths-averted");
-    dom.tblQalysGained = document.getElementById("tbl-qalys-gained");
-    dom.tblDalysAverted = document.getElementById("tbl-dalys-averted");
-    dom.tblMonetisedBenefits = document.getElementById("tbl-monetised-benefits");
-
-    dom.tblPublicCosts = document.getElementById("tbl-public-costs");
-    dom.tblEmployerCosts = document.getElementById("tbl-employer-costs");
-    dom.tblProgrammeCosts = document.getElementById("tbl-programme-costs");
-    dom.tblSocialCosts = document.getElementById("tbl-social-costs");
-    dom.tblTotalCosts = document.getElementById("tbl-total-costs");
-
-    dom.tblCerVaccinated = document.getElementById("tbl-cer-vaccinated");
-    dom.tblCerCase = document.getElementById("tbl-cer-case");
-    dom.tblCerDeath = document.getElementById("tbl-cer-death");
-    dom.tblCerQaly = document.getElementById("tbl-cer-qaly");
-    dom.tblCerDaly = document.getElementById("tbl-cer-daly");
-    dom.tblBcr = document.getElementById("tbl-bcr");
-    dom.tblPayback = document.getElementById("tbl-payback");
-
-    dom.equityTableBody = document.getElementById("equity-table-body");
-    dom.descriptiveScopeSelect = document.getElementById("desc-scope-select");
-    dom.descriptiveTableBody = document.getElementById("descriptive-table-body");
-
-    dom.tabs = document.querySelectorAll(".tab");
-    dom.tabContents = document.querySelectorAll(".tab-content");
-
-    dom.methodsDrawer = document.getElementById("methods-drawer");
-    dom.toggleMethodsBtn = document.getElementById("toggle-methods-btn");
-    dom.closeMethodsBtn = document.getElementById("close-methods-btn");
-    dom.exportPolicyBriefBtn = document.getElementById("export-policy-brief-btn");
-
-    // Charts
-    dom.uptakeChartCanvas = document.getElementById("uptake-chart");
-    dom.benefitChartCanvas = document.getElementById("benefit-chart");
-    dom.economicChartCanvas = document.getElementById("economic-chart");
-    dom.equityChartCanvas = document.getElementById("equity-chart");
-    dom.tornadoChartCanvas = document.getElementById("tornado-chart");
-    dom.ceacChartCanvas = document.getElementById("ceac-chart");
+    severe: {
+      ascPolicy: 0.884,
+      ascOptOut: 0.083,
+      betaScopeAll: -0.019,
+      betaExMedRel: -0.192,
+      betaExMedRelPers: -0.247,
+      betaCov70: 0.267,
+      betaCov90: 0.398,
+      betaLives: 0.052
+    }
   }
+};
 
-  // ---------------------------------------------------------------------------
-  // EVENT BINDING
-  // ---------------------------------------------------------------------------
-  function bindEvents() {
-    dom.countrySelect.addEventListener("change", () => {
-      state.country = dom.countrySelect.value;
-      updateAll();
-    });
+/* -----------------------------------------------------
+   DCE DATA – LATENT CLASS MODELS
+   From Tables 5 & 6 (preference space, 2 classes)
+   - We store preference parameters and class shares.
+   - Class membership covariates are not used here but
+     can be added later.
+----------------------------------------------------- */
 
-    dom.contextSelect.addEventListener("change", () => {
-      state.context = dom.contextSelect.value;
-      updateAll();
-    });
-
-    dom.benefitMetricSelect.addEventListener("change", () => {
-      state.benefitMetric = dom.benefitMetricSelect.value;
-      updateAll();
-    });
-
-    dom.mandateTypeSelect.addEventListener("change", () => {
-      state.mandate.type = dom.mandateTypeSelect.value;
-      updateAll();
-    });
-    dom.targetGroupSelect.addEventListener("change", () => {
-      state.mandate.targetGroup = dom.targetGroupSelect.value;
-      updateAll();
-    });
-    dom.enforcementRange.addEventListener("input", () => {
-      state.mandate.enforcementIntensity = toNumber(dom.enforcementRange.value);
-      updateAll();
-    });
-    dom.incentivesRange.addEventListener("input", () => {
-      state.mandate.incentives = toNumber(dom.incentivesRange.value);
-      updateAll();
-    });
-    dom.exemptionsSelect.addEventListener("change", () => {
-      state.mandate.exemptions = dom.exemptionsSelect.value;
-      updateAll();
-    });
-    dom.testingOptionSelect.addEventListener("change", () => {
-      state.mandate.testingOption = dom.testingOptionSelect.value;
-      updateAll();
-    });
-
-    // Epidemiology
-    dom.populationInput.addEventListener("input", () => {
-      state.epi.population = clampPositiveInt(dom.populationInput.value, 0);
-      updateAll();
-    });
-    dom.baselineUptakeInput.addEventListener("input", () => {
-      state.epi.baselineUptake = clamp(dom.baselineUptakeInput.value, 0, 1);
-      updateAll();
-    });
-    dom.attackRateInput.addEventListener("input", () => {
-      state.epi.attackRate = clamp(dom.attackRateInput.value, 0, 1);
-      updateAll();
-    });
-    dom.r0Input.addEventListener("input", () => {
-      state.epi.r0 = clampPositive(dom.r0Input.value, 0);
-      updateAll();
-    });
-    dom.veInput.addEventListener("input", () => {
-      state.epi.ve = clamp(dom.veInput.value, 0, 1);
-      updateAll();
-    });
-    dom.ifrInput.addEventListener("input", () => {
-      state.epi.ifr = clamp(dom.ifrInput.value, 0, 0.1);
-      updateAll();
-    });
-    dom.hospRiskInput.addEventListener("input", () => {
-      state.epi.hospRisk = clamp(dom.hospRiskInput.value, 0, 0.5);
-      updateAll();
-    });
-    dom.icuRiskInput.addEventListener("input", () => {
-      state.epi.icuRisk = clamp(dom.icuRiskInput.value, 0, 0.5);
-      updateAll();
-    });
-
-    // Econ
-    dom.wtpInput.addEventListener("input", () => {
-      state.econ.wtpQaly = clampPositive(dom.wtpInput.value, 0);
-      updateAll();
-    });
-    dom.discountRateInput.addEventListener("input", () => {
-      state.econ.discountRate = clamp(dom.discountRateInput.value, 0, 0.1);
-      updateAll();
-    });
-    dom.vslInput.addEventListener("input", () => {
-      state.econ.vsl = clampPositive(dom.vslInput.value, 0);
-      updateAll();
-    });
-    dom.vslyInput.addEventListener("input", () => {
-      state.econ.vsly = clampPositive(dom.vslyInput.value, 0);
-      updateAll();
-    });
-    dom.qalyLossDeathInput.addEventListener("input", () => {
-      state.econ.qalyLossDeath = clampPositive(dom.qalyLossDeathInput.value, 0);
-      updateAll();
-    });
-    dom.qalyLossCaseInput.addEventListener("input", () => {
-      state.econ.qalyLossCase = clampPositive(dom.qalyLossCaseInput.value, 0);
-      updateAll();
-    });
-
-    // Costs
-    dom.costToggles.forEach((toggle) => {
-      toggle.addEventListener("change", () => {
-        const id = toggle.dataset.costId;
-        if (state.costs[id]) {
-          state.costs[id].active = toggle.checked;
-          updateAll();
-        }
-      });
-    });
-    dom.costInputs.forEach((input) => {
-      input.addEventListener("input", () => {
-        const id = input.dataset.costId;
-        if (state.costs[id]) {
-          state.costs[id].value = clampPositive(input.value, 0);
-          updateAll();
-        }
-      });
-    });
-
-    // PSA controls
-    dom.psaRunsInput.addEventListener("input", () => {
-      state.psa.runs = clampPositiveInt(dom.psaRunsInput.value, 100);
-    });
-    dom.psaVariationInput.addEventListener("input", () => {
-      state.psa.variationPct = clampPositive(dom.psaVariationInput.value, 1);
-    });
-    dom.runPsaBtn.addEventListener("click", () => {
-      runProbabilisticSensitivity();
-    });
-
-    // Tabs
-    dom.tabs.forEach((tab) => {
-      tab.addEventListener("click", () => {
-        const target = tab.dataset.tab;
-        dom.tabs.forEach((t) => t.classList.remove("active"));
-        dom.tabContents.forEach((c) => c.classList.remove("active"));
-        tab.classList.add("active");
-        document.getElementById(target).classList.add("active");
-      });
-    });
-
-    // Methods drawer
-    dom.toggleMethodsBtn.addEventListener("click", () => {
-      dom.methodsDrawer.classList.add("open");
-    });
-    dom.closeMethodsBtn.addEventListener("click", () => {
-      dom.methodsDrawer.classList.remove("open");
-    });
-    dom.methodsDrawer.addEventListener("click", (e) => {
-      if (e.target === dom.methodsDrawer) {
-        dom.methodsDrawer.classList.remove("open");
+const LC_MODELS = {
+  AU: {
+    mild: {
+      // From Table 5 – Australia, mild
+      supporterShare: 0.7468,
+      resisterShare: 0.2532,
+      supporters: {
+        ascPolicy: 0.28,
+        ascOptOut: -1.01,
+        betaScopeAll: -0.19,
+        betaExMedRel: -0.18,
+        betaExMedRelPers: -0.21,
+        betaCov70: 0.10,
+        betaCov90: 0.17,
+        betaLives: 0.04
+      },
+      resisters: {
+        ascPolicy: 0.11,
+        ascOptOut: 2.96,
+        betaScopeAll: -0.26,
+        betaExMedRel: 0.11,
+        betaExMedRelPers: 0.15,
+        betaCov70: -0.09,
+        betaCov90: -0.26,
+        betaLives: 0.02
       }
-    });
-
-    // Descriptive stats
-    dom.descriptiveScopeSelect.addEventListener("change", () => {
-      renderDescriptiveStats();
-    });
-
-    // Export
-    dom.exportPolicyBriefBtn.addEventListener("click", () => {
-      exportPolicyBrief();
-    });
-  }
-
-  // ---------------------------------------------------------------------------
-  // NUMERIC HELPERS
-  // ---------------------------------------------------------------------------
-  function toNumber(val) {
-    const n = Number(val);
-    return Number.isFinite(n) ? n : 0;
-  }
-
-  function clamp(val, min, max) {
-    const n = toNumber(val);
-    if (!Number.isFinite(n)) return min;
-    return Math.max(min, Math.min(max, n));
-  }
-
-  function clampPositive(val, min) {
-    const n = toNumber(val);
-    if (!Number.isFinite(n)) return min;
-    return Math.max(min, n);
-  }
-
-  function clampPositiveInt(val, min) {
-    return Math.round(clampPositive(val, min));
-  }
-
-  function formatNumber(num, decimals = 0) {
-    if (!Number.isFinite(num)) return "–";
-    return num.toLocaleString(undefined, {
-      maximumFractionDigits: decimals,
-      minimumFractionDigits: decimals,
-    });
-  }
-
-  // ---------------------------------------------------------------------------
-  // DCE UPTAKE ENGINE
-  // ---------------------------------------------------------------------------
-  function computeMandateIntensity(mandate) {
-    // Simple index combining type, enforcement, incentives, exemptions, and testing
-    let score = 0;
-
-    switch (mandate.type) {
-      case "none":
-        score += 0;
-        break;
-      case "soft":
-        score += 1;
-        break;
-      case "sectoral":
-        score += 2;
-        break;
-      case "broad":
-        score += 3;
-        break;
-    }
-
-    switch (mandate.targetGroup) {
-      case "all_adults":
-        score += 1.5;
-        break;
-      case "older_adults":
-        score += 1;
-        break;
-      case "health_workers":
-      case "essential_workers":
-        score += 1.2;
-        break;
-    }
-
-    score += mandate.enforcementIntensity / 4; // 0–2.5
-    score += mandate.incentives / 5; // 0–2
-
-    switch (mandate.exemptions) {
-      case "lenient":
-        score -= 0.5;
-        break;
-      case "balanced":
-        break;
-      case "strict":
-        score += 0.5;
-        break;
-    }
-
-    switch (mandate.testingOption) {
-      case "none":
-        score += 0.3;
-        break;
-      case "weekly":
-        score += 0.1;
-        break;
-      case "frequent":
-        score += 0;
-        break;
-    }
-
-    return score;
-  }
-
-  function logistic(x) {
-    return 1 / (1 + Math.exp(-x));
-  }
-
-  function computeDceUptake() {
-    const countryData = dceResults[state.country]?.[state.context];
-    const { baselineUptake } = state.epi;
-
-    if (!countryData || !countryData.latentClasses) {
-      return {
-        pm: baselineUptake,
-        deltaP: 0,
-        classUptake: [],
-      };
-    }
-
-    const intensity = computeMandateIntensity(state.mandate);
-
-    let pm = 0;
-    const classUptake = [];
-
-    countryData.latentClasses.forEach((cls) => {
-      // Placeholder linear utility mapping – replace with full U = ASC + βX
-      const u =
-        cls.baseIntercept +
-        cls.mandateIntensityWeight * intensity +
-        cls.incentiveWeight * (state.mandate.incentives / 10) +
-        cls.enforcementWeight * (state.mandate.enforcementIntensity / 10);
-
-      const uptake = logistic(u); // between 0 and 1
-      pm += cls.share * uptake;
-      classUptake.push({
-        name: cls.name,
-        share: cls.share,
-        uptake,
-      });
-    });
-
-    // Ensure not below baseline in "no mandate" scenario
-    if (state.mandate.type === "none") {
-      pm = baselineUptake;
-      classUptake.forEach((c) => {
-        c.uptake = baselineUptake;
-      });
-    }
-
-    const deltaP = pm - baselineUptake;
-
-    return {
-      pm,
-      deltaP,
-      classUptake,
-    };
-  }
-
-  // ---------------------------------------------------------------------------
-  // BENEFITS & EPIDEMIOLOGY
-  // ---------------------------------------------------------------------------
-  function computeBenefits(uptakeResult) {
-    const { epi, econ, benefitMetric, country, context } = {
-      epi: state.epi,
-      econ: state.econ,
-      benefitMetric: state.benefitMetric,
-      country: state.country,
-      context: state.context,
-    };
-
-    const { population, baselineUptake, attackRate, ve, ifr, hospRisk, icuRisk } =
-      epi;
-    const { qalyLossDeath, qalyLossCase, vsl, vsly } = econ;
-
-    const pm = uptakeResult.pm;
-    const deltaP = uptakeResult.deltaP;
-
-    // BENEFIT METRIC A — Additional vaccinated
-    const deltaV = population * deltaP;
-
-    // Cases averted using static attack-rate approximation
-    const casesNoMandate = population * attackRate * (1 - baselineUptake * ve);
-    const casesMandate = population * attackRate * (1 - pm * ve);
-    const casesAverted = Math.max(0, casesNoMandate - casesMandate);
-
-    // Hospitalisations, ICU, deaths averted (approx)
-    const hospAverted = casesAverted * hospRisk;
-    const icuAverted = casesAverted * icuRisk;
-    const deathsNoMandate = casesNoMandate * ifr;
-    const deathsMandate = casesMandate * ifr;
-    const deathsAverted = Math.max(0, deathsNoMandate - deathsMandate);
-
-    // QALYs gained: mortality + morbidity (acute + long-COVID placeholder)
-    const qalyMortality = deathsAverted * qalyLossDeath;
-    const qalyMorbidity = casesAverted * qalyLossCase;
-    const qalyGained = qalyMortality + qalyMorbidity;
-
-    // Simplified DALYs averted (YLL ~ qalyMortality, YLD ~ qalyMorbidity)
-    const dalysAverted = qalyGained;
-
-    // Monetised benefits: mortality + morbidity monetised
-    const monetisedMortality = deathsAverted * vsl;
-    const monetisedMorbidity = qalyMorbidity * vsly;
-    const monetisedBenefits = monetisedMortality + monetisedMorbidity;
-
-    // Equity-weighted metrics will be added downstream
-    const benefitBundle = {
-      country,
-      context,
-      pm,
-      deltaP,
-      deltaV,
-      casesAverted,
-      hospAverted,
-      icuAverted,
-      deathsAverted,
-      qalyGained,
-      dalysAverted,
-      monetisedBenefits,
-    };
-
-    // Benefit metric selection (for robustness comparisons the whole bundle is returned)
-    benefitBundle.activeMetric = benefitMetric;
-
-    return benefitBundle;
-  }
-
-  // ---------------------------------------------------------------------------
-  // COSTS & ECONOMIC EVALUATION
-  // ---------------------------------------------------------------------------
-  function computeCosts() {
-    let publicCosts = 0;
-    let employerCosts = 0;
-    let programmeCosts = 0;
-    let socialCosts = 0;
-
-    const addIfActive = (key, type) => {
-      const item = state.costs[key];
-      if (!item) return;
-      if (!item.active) return;
-      const value = Number(item.value) || 0;
-      if (type === "public") publicCosts += value;
-      if (type === "employer") employerCosts += value;
-      if (type === "programme") programmeCosts += value;
-      if (type === "social") socialCosts += value;
-    };
-
-    // Public
-    addIfActive("policyDrafting", "public");
-    addIfActive("legalPrep", "public");
-    addIfActive("communications", "public");
-    addIfActive("itSystems", "public");
-    addIfActive("exemptionProcessing", "public");
-    addIfActive("enforcement", "public");
-    addIfActive("extraCapacity", "public");
-
-    // Employer
-    addIfActive("managementTime", "employer");
-    addIfActive("ptoVaccination", "employer");
-    addIfActive("ptoSideEffects", "employer");
-    addIfActive("recordKeeping", "employer");
-    addIfActive("testingCosts", "employer");
-    addIfActive("staffingDisruptions", "employer");
-
-    // Programme
-    addIfActive("vaccineProcurement", "programme");
-    addIfActive("coldChain", "programme");
-    addIfActive("logistics", "programme");
-    addIfActive("vaccinators", "programme");
-    addIfActive("trainingSupervision", "programme");
-    addIfActive("capitalEquipment", "programme");
-    addIfActive("utilitiesOverhead", "programme");
-    addIfActive("wasteDisposal", "programme");
-
-    // Social
-    addIfActive("trustErosion", "social");
-    addIfActive("polarisation", "social");
-    addIfActive("protests", "social");
-    addIfActive("unmetCare", "social");
-
-    const totalCosts = publicCosts + employerCosts + programmeCosts + socialCosts;
-
-    return {
-      publicCosts,
-      employerCosts,
-      programmeCosts,
-      socialCosts,
-      totalCosts,
-    };
-  }
-
-  function computeEconomicEvaluation(benefits, costs) {
-    const { econ } = state;
-    const { wtpQaly } = econ;
-
-    const { deltaV, casesAverted, deathsAverted, qalyGained, dalysAverted, monetisedBenefits } =
-      benefits;
-    const { totalCosts } = costs;
-
-    const costPerVaccinated =
-      deltaV > 0 ? totalCosts / deltaV : Number.POSITIVE_INFINITY;
-    const costPerCase = casesAverted > 0 ? totalCosts / casesAverted : Number.POSITIVE_INFINITY;
-    const costPerDeath =
-      deathsAverted > 0 ? totalCosts / deathsAverted : Number.POSITIVE_INFINITY;
-    const costPerQaly =
-      qalyGained > 0 ? totalCosts / qalyGained : Number.POSITIVE_INFINITY;
-    const costPerDaly =
-      dalysAverted > 0 ? totalCosts / dalysAverted : Number.POSITIVE_INFINITY;
-
-    const nmb = qalyGained * wtpQaly - totalCosts;
-    const bcr = totalCosts > 0 ? monetisedBenefits / totalCosts : null;
-
-    // Simple payback (years) from monetised benefits vs initial costs
-    const annualBenefits = monetisedBenefits;
-    const paybackTime =
-      annualBenefits > 0 ? totalCosts / annualBenefits : Number.POSITIVE_INFINITY;
-
-    return {
-      costPerVaccinated,
-      costPerCase,
-      costPerDeath,
-      costPerQaly,
-      costPerDaly,
-      nmb,
-      bcr,
-      paybackTime,
-    };
-  }
-
-  // ---------------------------------------------------------------------------
-  // EQUITY MODULE
-  // ---------------------------------------------------------------------------
-  function computeEquity(benefits) {
-    const totalQalys = benefits.qalyGained;
-    if (!Number.isFinite(totalQalys) || totalQalys <= 0) {
-      return {
-        subgroupResults: [],
-        equityWeightedQalys: 0,
-      };
-    }
-
-    const { subgroups, weights } = equityParams;
-    const totalWeight = subgroups.reduce((acc, g) => acc + (weights[g] || 1), 0);
-
-    const subgroupResults = subgroups.map((group) => {
-      const w = weights[group] || 1;
-      const share = w / totalWeight;
-      const qalys = totalQalys * share;
-      const weightedQalys = qalys * w;
-      return {
-        group,
-        weight: w,
-        qalys,
-        weightedQalys,
-      };
-    });
-
-    const equityWeightedQalys = subgroupResults.reduce(
-      (acc, r) => acc + r.weightedQalys,
-      0
-    );
-
-    return {
-      subgroupResults,
-      equityWeightedQalys,
-    };
-  }
-
-  // ---------------------------------------------------------------------------
-  // SENSITIVITY & PSA
-  // ---------------------------------------------------------------------------
-  function runDeterministicSensitivity(benefits, costs, econEval) {
-    // Simple tornado: vary a subset of key parameters ± variationPct
-    const variation = state.psa.variationPct / 100;
-    const baseCostPerQaly = econEval.costPerQaly;
-
-    const drivers = [
-      {
-        key: "ve",
-        label: "Vaccine effectiveness",
-        type: "epi",
+    },
+    severe: {
+      // From Table 6 – Australia, severe
+      supporterShare: 0.7776,
+      resisterShare: 0.2224,
+      supporters: {
+        ascPolicy: 0.27,
+        ascOptOut: -0.82,
+        betaScopeAll: 0.12,
+        betaExMedRel: -0.15,
+        betaExMedRelPers: -0.23,
+        betaCov70: 0.16,
+        betaCov90: 0.24,
+        betaLives: 0.04
       },
-      {
-        key: "attackRate",
-        label: "Attack rate",
-        type: "epi",
-      },
-      {
-        key: "vsl",
-        label: "Value of statistical life",
-        type: "econ",
-      },
-      {
-        key: "qalyLossDeath",
-        label: "QALY loss per death",
-        type: "econ",
-      },
-      {
-        key: "totalCosts",
-        label: "Programme & implementation costs",
-        type: "costs",
-      },
-    ];
-
-    const bars = [];
-
-    drivers.forEach((driver) => {
-      const { key, label, type } = driver;
-
-      // Clone state
-      const originalEpi = { ...state.epi };
-      const originalEcon = { ...state.econ };
-      const originalCosts = { ...costs };
-
-      // Base value
-      let baseVal;
-      if (type === "epi") baseVal = originalEpi[key];
-      else if (type === "econ") baseVal = originalEcon[key];
-      else baseVal = originalCosts[key];
-
-      const lowVal = baseVal * (1 - variation);
-      const highVal = baseVal * (1 + variation);
-
-      const computeCostPerQalyFor = (val) => {
-        if (type === "epi") state.epi[key] = val;
-        if (type === "econ") state.econ[key] = val;
-        if (type === "costs") {
-          const factor = val / baseVal;
-          Object.keys(state.costs).forEach((cKey) => {
-            state.costs[cKey].value *= factor;
-          });
-        }
-
-        const uptakeRes = computeDceUptake();
-        const benefitsRes = computeBenefits(uptakeRes);
-        const costsRes = computeCosts();
-        const econRes = computeEconomicEvaluation(benefitsRes, costsRes);
-        return econRes.costPerQaly;
-      };
-
-      const lowCostPerQaly = computeCostPerQalyFor(lowVal);
-      const highCostPerQaly = computeCostPerQalyFor(highVal);
-
-      // Restore
-      state.epi = originalEpi;
-      state.econ = originalEcon;
-      Object.keys(state.costs).forEach((cKey) => {
-        state.costs[cKey].value = costs[cKey]?.value ?? state.costs[cKey].value;
-      });
-
-      bars.push({
-        label,
-        low: lowCostPerQaly,
-        high: highCostPerQaly,
-        base: baseCostPerQaly,
-      });
-    });
-
-    // Sort by width
-    bars.sort((a, b) => {
-      const rangeA = Math.abs(a.high - a.low);
-      const rangeB = Math.abs(b.high - b.low);
-      return rangeB - rangeA;
-    });
-
-    renderTornadoChart(bars);
-  }
-
-  function runProbabilisticSensitivity() {
-    const runs = state.psa.runs;
-    const variation = state.psa.variationPct / 100;
-
-    dom.psaStatus.textContent = "Running PSA...";
-    dom.runPsaBtn.disabled = true;
-
-    // Short delay to allow UI to update
-    setTimeout(() => {
-      const { epi, econ } = state;
-      const { wtpQaly } = econ;
-
-      const results = [];
-
-      for (let i = 0; i < runs; i++) {
-        // Sample key parameters with uniform ±variation
-        const epiSample = {
-          ...epi,
-          ve: epi.ve * randomFactor(variation),
-          attackRate: epi.attackRate * randomFactor(variation),
-          ifr: epi.ifr * randomFactor(variation),
-        };
-        const econSample = {
-          ...econ,
-          qalyLossDeath: econ.qalyLossDeath * randomFactor(variation),
-          qalyLossCase: econ.qalyLossCase * randomFactor(variation),
-        };
-
-        // Temporarily override state
-        const originalEpi = state.epi;
-        const originalEcon = state.econ;
-        state.epi = epiSample;
-        state.econ = econSample;
-
-        const uptakeRes = computeDceUptake();
-        const benefits = computeBenefits(uptakeRes);
-        const costs = computeCosts();
-        const econEval = computeEconomicEvaluation(benefits, costs);
-
-        const nmb = econEval.nmb;
-        const costPerQaly = econEval.costPerQaly;
-
-        results.push({
-          nmb,
-          costPerQaly,
-        });
-
-        // Restore
-        state.epi = originalEpi;
-        state.econ = originalEcon;
+      resisters: {
+        ascPolicy: 0.15,
+        ascOptOut: 2.68,
+        betaScopeAll: -0.0,
+        betaExMedRel: -0.09,
+        betaExMedRelPers: 0.06,
+        betaCov70: 0.09,
+        betaCov90: 0.05,
+        betaLives: 0.01
       }
+    }
+  },
+  IT: {
+    mild: {
+      supporterShare: 0.7005,
+      resisterShare: 0.2995,
+      supporters: {
+        ascPolicy: 0.42,
+        ascOptOut: -0.96,
+        betaScopeAll: -0.18,
+        betaExMedRel: -0.14,
+        betaExMedRelPers: -0.24,
+        betaCov70: 0.13,
+        betaCov90: 0.18,
+        betaLives: 0.03
+      },
+      resisters: {
+        ascPolicy: 0.10,
+        ascOptOut: 2.70,
+        betaScopeAll: -0.24,
+        betaExMedRel: -0.12,
+        betaExMedRelPers: 0.07,
+        betaCov70: -0.09,
+        betaCov90: -0.18,
+        betaLives: 0.01
+      }
+    },
+    severe: {
+      supporterShare: 0.7477,
+      resisterShare: 0.2523,
+      supporters: {
+        ascPolicy: 0.44,
+        ascOptOut: -0.74,
+        betaScopeAll: 0.17,
+        betaExMedRel: -0.12,
+        betaExMedRelPers: -0.23,
+        betaCov70: 0.20,
+        betaCov90: 0.36,
+        betaLives: 0.03
+      },
+      resisters: {
+        ascPolicy: 0.34,
+        ascOptOut: 2.60,
+        betaScopeAll: -0.06,
+        betaExMedRel: -0.17,
+        betaExMedRelPers: 0.09,
+        betaCov70: -0.06,
+        betaCov90: -0.02,
+        betaLives: 0.00
+      }
+    }
+  },
+  FR: {
+    mild: {
+      supporterShare: 0.7169,
+      resisterShare: 0.2831,
+      // In France mild, Class 2 = supporters, Class 1 = resisters
+      supporters: {
+        ascPolicy: 0.56,
+        ascOptOut: -0.68,
+        betaScopeAll: -0.11,
+        betaExMedRel: -0.16,
+        betaExMedRelPers: -0.15,
+        betaCov70: 0.12,
+        betaCov90: 0.19,
+        betaLives: 0.03
+      },
+      resisters: {
+        ascPolicy: 0.45,
+        ascOptOut: 2.75,
+        betaScopeAll: -0.18,
+        betaExMedRel: 0.07,
+        betaExMedRelPers: 0.18,
+        betaCov70: -0.01,
+        betaCov90: -0.02,
+        betaLives: 0.01
+      }
+    },
+    severe: {
+      supporterShare: 0.7504,
+      resisterShare: 0.2496,
+      // In France severe, Class 2 = supporters, Class 1 = resisters
+      supporters: {
+        ascPolicy: 0.53,
+        ascOptOut: -0.57,
+        betaScopeAll: 0.06,
+        betaExMedRel: -0.12,
+        betaExMedRelPers: -0.18,
+        betaCov70: 0.15,
+        betaCov90: 0.27,
+        betaLives: 0.04
+      },
+      resisters: {
+        ascPolicy: 0.41,
+        ascOptOut: 2.40,
+        betaScopeAll: -0.20,
+        betaExMedRel: -0.10,
+        betaExMedRelPers: -0.05,
+        betaCov70: 0.11,
+        betaCov90: 0.18,
+        betaLives: 0.00
+      }
+    }
+  }
+};
 
-      state.psa.results = results;
+/* -----------------------------------------------------
+   HELPER FUNCTIONS
+----------------------------------------------------- */
 
-      renderCeacChart(results, wtpQaly);
-      dom.psaStatus.textContent = `PSA completed with ${runs.toLocaleString()} runs.`;
-      dom.runPsaBtn.disabled = false;
-    }, 50);
+function logitProbability(vMandate, vOptOut) {
+  const expM = Math.exp(vMandate);
+  const expO = Math.exp(vOptOut);
+  return expM / (expM + expO);
+}
+
+function getMXLParams() {
+  return MXL_COEFFS[appState.country][appState.outbreak];
+}
+
+function getLCModel() {
+  return LC_MODELS[appState.country][appState.outbreak];
+}
+
+function mapAttributesToUtilityTerms(modelParams) {
+  const {
+    betaScopeAll,
+    betaExMedRel,
+    betaExMedRelPers,
+    betaCov70,
+    betaCov90,
+    betaLives,
+    ascPolicy,
+    ascOptOut
+  } = modelParams;
+
+  let utility = ascPolicy;
+  let optOut = ascOptOut;
+
+  // Scope
+  if (appState.scope === "all_public") {
+    utility += betaScopeAll;
   }
 
-  function randomFactor(variation) {
-    const u = Math.random() * 2 - 1; // [-1, 1]
-    return 1 + variation * u;
+  // Exemptions
+  if (appState.exemptions === "med_relig") {
+    utility += betaExMedRel;
+  } else if (appState.exemptions === "med_relig_personal") {
+    utility += betaExMedRelPers;
   }
 
-  // ---------------------------------------------------------------------------
-  // CHARTS
-  // ---------------------------------------------------------------------------
-  const charts = {
-    uptake: null,
-    benefit: null,
-    economic: null,
-    equity: null,
-    tornado: null,
-    ceac: null,
+  // Coverage
+  if (appState.coverage === "70") {
+    utility += betaCov70;
+  } else if (appState.coverage === "90") {
+    utility += betaCov90;
+  }
+
+  // Expected lives saved
+  utility += betaLives * appState.livesSaved;
+
+  return { vMandate: utility, vOptOut: optOut };
+}
+
+/* -----------------------------------------------------
+   UPTAKE ENGINE
+   - Computes uptake using MXL means
+   - Computes class-specific uptake using LC models
+   - Composite uptake = average of MXL & LC-weighted
+----------------------------------------------------- */
+
+function computeUptake() {
+  // MXL-based uptake
+  const mxlParams = getMXLParams();
+  const mxlUtil = mapAttributesToUtilityTerms(mxlParams);
+  const mxlProb = logitProbability(mxlUtil.vMandate, mxlUtil.vOptOut);
+
+  // LC-based uptake
+  const lcModel = getLCModel();
+
+  const utilSupporters = mapAttributesToUtilityTerms(lcModel.supporters);
+  const utilResisters = mapAttributesToUtilityTerms(lcModel.resisters);
+
+  const pSupporters = logitProbability(
+    utilSupporters.vMandate,
+    utilSupporters.vOptOut
+  );
+  const pResisters = logitProbability(
+    utilResisters.vMandate,
+    utilResisters.vOptOut
+  );
+
+  const uptakeWeighted =
+    lcModel.supporterShare * pSupporters +
+    lcModel.resisterShare * pResisters;
+
+  // Composite engine (simple 50/50 blend – can be updated later)
+  const composite = 0.5 * mxlProb + 0.5 * uptakeWeighted;
+
+  return {
+    mxl: mxlProb,
+    lcSupporters: pSupporters,
+    lcResisters: pResisters,
+    lcWeighted: uptakeWeighted,
+    composite
   };
+}
 
-  function initCharts() {
-    // Uptake chart – cross-country comparison under current context & mandate intensity
-    charts.uptake = new Chart(dom.uptakeChartCanvas.getContext("2d"), {
+/* -----------------------------------------------------
+   EPIDEMIOLOGY & BENEFIT METRICS
+   NOTE: these are deliberately simple, transparent
+   placeholders so that you can plug in your own
+   calibrated parameters later.
+----------------------------------------------------- */
+
+function computeBenefits(uptake) {
+  const pop = appState.population;
+  const baselineCoverage = appState.baselineCoverage;
+
+  // Map composite uptake (preference for mandate) -> new coverage
+  // Here we assume that, at most, the mandate can increase coverage
+  // by 20 percentage points over baseline.
+  const maxDeltaCoverage = 0.2;
+  const deltaCoverage = maxDeltaCoverage * (uptake.composite - 0.5); // centred at 0.5
+  const newCoverage = Math.min(0.99, Math.max(baselineCoverage, baselineCoverage + deltaCoverage));
+
+  // BENEFIT A: Additional vaccinated
+  const additionalVaccinated = Math.max(
+    0,
+    pop * (newCoverage - baselineCoverage)
+  );
+
+  // Attack rates (very simple defaults)
+  const attackRateBaseline = appState.outbreak === "severe" ? 0.35 : 0.15;
+  const infectionRRPerVax = 0.5; // 50% risk reduction for those newly vaccinated
+
+  const baselineCases = pop * attackRateBaseline;
+  const casesAverted =
+    additionalVaccinated * attackRateBaseline * infectionRRPerVax;
+
+  // Hospitalisation / ICU / death (age-standardised placeholders)
+  const hospRate = appState.outbreak === "severe" ? 0.03 : 0.015;
+  const icuRate = appState.outbreak === "severe" ? 0.01 : 0.004;
+  const deathRate = appState.outbreak === "severe" ? 0.005 : 0.0015;
+
+  const hospAverted = casesAverted * hospRate;
+  const icuAverted = casesAverted * icuRate;
+  const deathsAverted = casesAverted * deathRate;
+
+  // QALYs and DALYs (very stylised)
+  const qalyPerHospitalisation = 0.05;
+  const qalyPerICU = 0.2;
+  const qalyPerDeath = 10;
+
+  const qalyGained =
+    hospAverted * qalyPerHospitalisation +
+    icuAverted * qalyPerICU +
+    deathsAverted * qalyPerDeath;
+
+  const dalysAverted = qalyGained; // if QALY ~ DALY in sign convention
+
+  // Monetised benefits (CBA)
+  const directCostPerHosp = 8000;
+  const directCostPerICU = 25000;
+  const directCostPerCase = 300;
+
+  const medicalCostsAvoided =
+    casesAverted * directCostPerCase +
+    hospAverted * directCostPerHosp +
+    icuAverted * directCostPerICU;
+
+  const productivityLossPerCase = 400;
+  const productivityLossAvoided = casesAverted * productivityLossPerCase;
+
+  const vslComponent = deathsAverted * appState.vsl;
+
+  const monetisedBenefits =
+    medicalCostsAvoided + productivityLossAvoided + vslComponent;
+
+  return {
+    additionalVaccinated,
+    casesAverted,
+    hospAverted,
+    icuAverted,
+    deathsAverted,
+    qalyGained,
+    dalysAverted,
+    medicalCostsAvoided,
+    productivityLossAvoided,
+    vslComponent,
+    monetisedBenefits,
+    baselineCoverage,
+    newCoverage
+  };
+}
+
+/* -----------------------------------------------------
+   COST MODULE (PUBLIC, EMPLOYER, PROGRAMME)
+   – Highly stylised template. Plug in your own values.
+----------------------------------------------------- */
+
+function computeCosts(uptake, benefits) {
+  const pop = appState.population;
+
+  // PUBLIC-SECTOR COSTS (per capita placeholders)
+  const policyDrafting = 200_000;
+  const legalPrep = 300_000;
+  const commsCampaign = 1_000_000;
+  const itSystems = 1_200_000;
+  const exemptionProcessing = 500_000;
+  const enforcement = 1_500_000;
+
+  const publicSectorFixed =
+    policyDrafting +
+    legalPrep +
+    commsCampaign +
+    itSystems +
+    exemptionProcessing +
+    enforcement;
+
+  // Vaccination programme costs – marginal cost for additional doses
+  const doseCost = 25; // vaccine + delivery per dose
+  const programmeVariableCosts = benefits.additionalVaccinated * doseCost;
+
+  // EMPLOYER-SIDE COSTS (placeholders)
+  const employerCostPerWorker = 80; // PTO, admin, testing
+  const shareWorkforceTargeted =
+    appState.scope === "high_risk" ? 0.15 : 0.65;
+  const employerCosts =
+    pop * shareWorkforceTargeted * 0.5 * employerCostPerWorker; // assume working-age share
+
+  // Attrition (approximate; could be switched off)
+  const attritionRate = appState.scope === "high_risk" ? 0.005 : 0.015;
+  const replacementCostPerWorker = 20_000;
+  const attritionCosts =
+    appState.includeControversialCosts
+      ? pop * shareWorkforceTargeted * attritionRate * replacementCostPerWorker
+      : 0;
+
+  const totalProgrammeCosts =
+    publicSectorFixed + programmeVariableCosts + employerCosts + attritionCosts;
+
+  return {
+    publicSectorFixed,
+    programmeVariableCosts,
+    employerCosts,
+    attritionCosts,
+    totalProgrammeCosts
+  };
+}
+
+/* -----------------------------------------------------
+   ECONOMIC EVALUATION: CBA / CEA / NMB
+----------------------------------------------------- */
+
+function computeEconomicEvaluation(benefits, costs) {
+  const totalCosts = costs.totalProgrammeCosts;
+  const totalBenefitsMonetised = benefits.monetisedBenefits;
+
+  const npv = totalBenefitsMonetised - totalCosts;
+  const bcr = totalBenefitsMonetised / (totalCosts || 1);
+
+  const costPerVaccinated =
+    totalCosts / (benefits.additionalVaccinated || 1);
+  const costPerCaseAverted = totalCosts / (benefits.casesAverted || 1);
+  const costPerDeathAverted = totalCosts / (benefits.deathsAverted || 1);
+  const costPerQALY = totalCosts / (benefits.qalyGained || 1);
+
+  const nmb = benefits.qalyGained * appState.valuePerQALY - totalCosts;
+
+  return {
+    npv,
+    bcr,
+    costPerVaccinated,
+    costPerCaseAverted,
+    costPerDeathAverted,
+    costPerQALY,
+    nmb,
+    totalCosts,
+    totalBenefitsMonetised
+  };
+}
+
+/* -----------------------------------------------------
+   EQUITY MODULE – SIMPLE PLACEHOLDER
+   Here we just split QALYs across three SES groups using
+   an arbitrary pattern and compute a very simple
+   “equity-weighted NMB”.
+----------------------------------------------------- */
+
+function computeEquity(benefits, economics) {
+  const qaly = benefits.qalyGained;
+
+  // Split QALYs by SES (low, middle, high)
+  const shareLow = 0.45;
+  const shareMid = 0.35;
+  const shareHigh = 0.20;
+
+  const qalyLow = qaly * shareLow;
+  const qalyMid = qaly * shareMid;
+  const qalyHigh = qaly * shareHigh;
+
+  // Very simple equity weights (Cookson-style idea)
+  const wLow = 1.3;
+  const wMid = 1.0;
+  const wHigh = 0.7;
+
+  const eqWeightedQALY =
+    qalyLow * wLow + qalyMid * wMid + qalyHigh * wHigh;
+
+  const equityAdjustedNMB =
+    eqWeightedQALY * appState.valuePerQALY - economics.totalCosts;
+
+  return {
+    qalyLow,
+    qalyMid,
+    qalyHigh,
+    eqWeightedQALY,
+    equityAdjustedNMB
+  };
+}
+
+/* -----------------------------------------------------
+   UI HELPERS
+----------------------------------------------------- */
+
+function setText(id, text) {
+  const el = document.getElementById(id);
+  if (el) el.textContent = text;
+}
+
+function formatPercent(x) {
+  return `${(x * 100).toFixed(1)}%`;
+}
+
+function formatRate(x) {
+  return x.toLocaleString(undefined, {
+    maximumFractionDigits: 0
+  });
+}
+
+function formatCurrency(x) {
+  return "AUD " + x.toLocaleString(undefined, {
+    maximumFractionDigits: 0
+  });
+}
+
+/* -----------------------------------------------------
+   CHARTS (lazy initialisation)
+----------------------------------------------------- */
+
+let uptakeByClassChart;
+let benefitComparisonChart;
+let ceacChart;
+let equityChart;
+let tornadoChart;
+
+function initCharts() {
+  const uptakeCanvas = document.getElementById("uptakeByClassChart");
+  if (uptakeCanvas && window.Chart && !uptakeByClassChart) {
+    uptakeByClassChart = new Chart(uptakeCanvas.getContext("2d"), {
       type: "bar",
       data: {
-        labels: ["Australia", "France", "Italy"],
+        labels: ["MXL mean", "LC supporters", "LC resisters", "LC weighted"],
         datasets: [
           {
-            label: "Predicted uptake (pₘ)",
-            data: [0.7, 0.7, 0.7],
-          },
-        ],
+            label: "Predicted uptake",
+            data: [0, 0, 0, 0]
+          }
+        ]
       },
       options: {
         responsive: true,
-        plugins: {
-          legend: { display: false },
-          tooltip: { intersect: false, mode: "index" },
-        },
+        plugins: { legend: { display: false } },
         scales: {
           y: {
-            beginAtZero: true,
+            min: 0,
             max: 1,
-          },
-        },
-      },
+            ticks: {
+              callback: (v) => `${(v * 100).toFixed(0)}%`
+            }
+          }
+        }
+      }
     });
+  }
 
-    charts.benefit = new Chart(dom.benefitChartCanvas.getContext("2d"), {
+  const benefitCanvas = document.getElementById("benefitComparisonChart");
+  if (benefitCanvas && window.Chart && !benefitComparisonChart) {
+    benefitComparisonChart = new Chart(benefitCanvas.getContext("2d"), {
       type: "bar",
       data: {
-        labels: [
-          "Additional vaccinated",
-          "Cases averted",
-          "QALYs gained",
-          "DALYs averted",
-          "Monetised benefits",
-        ],
+        labels: ["Cases", "Hosp.", "ICU", "Deaths"],
         datasets: [
           {
-            label: "Value",
-            data: [0, 0, 0, 0, 0],
-          },
-        ],
+            label: "Averted",
+            data: [0, 0, 0, 0]
+          }
+        ]
       },
       options: {
         responsive: true,
-        plugins: {
-          legend: { display: false },
-        },
+        plugins: { legend: { display: false } },
         scales: {
           y: {
-            beginAtZero: true,
-          },
-        },
-      },
+            ticks: {
+              callback: (v) => v.toLocaleString()
+            }
+          }
+        }
+      }
     });
+  }
 
-    charts.economic = new Chart(dom.economicChartCanvas.getContext("2d"), {
+  const equityCanvas = document.getElementById("equityDistributionChart");
+  if (equityCanvas && window.Chart && !equityChart) {
+    equityChart = new Chart(equityCanvas.getContext("2d"), {
       type: "bar",
       data: {
-        labels: ["Total costs", "Monetised benefits"],
+        labels: ["Low SES", "Middle SES", "High SES"],
         datasets: [
           {
-            label: "Amount",
-            data: [0, 0],
-          },
-        ],
+            label: "QALYs gained",
+            data: [0, 0, 0]
+          }
+        ]
       },
       options: {
         responsive: true,
-        plugins: {
-          legend: { display: false },
-        },
+        plugins: { legend: { display: false } },
         scales: {
           y: {
-            beginAtZero: true,
-          },
-        },
-      },
+            ticks: {
+              callback: (v) => v.toFixed(1)
+            }
+          }
+        }
+      }
     });
+  }
 
-    charts.equity = new Chart(dom.equityChartCanvas.getContext("2d"), {
-      type: "bar",
+  const ceacCanvas = document.getElementById("ceacChart");
+  if (ceacCanvas && window.Chart && !ceacChart) {
+    ceacChart = new Chart(ceacCanvas.getContext("2d"), {
+      type: "line",
       data: {
-        labels: equityParams.subgroups,
+        labels: [0, 25_000, 50_000, 75_000, 100_000],
         datasets: [
           {
-            label: "Weighted QALYs",
-            data: [0, 0, 0],
-          },
-        ],
+            label: "Probability cost-effective",
+            data: [0.1, 0.35, 0.6, 0.8, 0.9],
+            fill: false
+          }
+        ]
       },
       options: {
         responsive: true,
-        plugins: {
-          legend: { display: false },
-        },
+        plugins: { legend: { display: false } },
         scales: {
-          y: {
-            beginAtZero: true,
+          x: {
+            ticks: {
+              callback: (v) => `AUD ${v / 1000}k`
+            }
           },
-        },
-      },
+          y: {
+            min: 0,
+            max: 1,
+            ticks: {
+              callback: (v) => `${(v * 100).toFixed(0)}%`
+            }
+          }
+        }
+      }
     });
+  }
 
-    charts.tornado = new Chart(dom.tornadoChartCanvas.getContext("2d"), {
+  const tornadoCanvas = document.getElementById("tornadoChart");
+  if (tornadoCanvas && window.Chart && !tornadoChart) {
+    tornadoChart = new Chart(tornadoCanvas.getContext("2d"), {
       type: "bar",
       data: {
-        labels: [],
+        labels: ["Vaccine effectiveness", "Attrition", "Employer costs", "VSL"],
         datasets: [
           {
-            label: "Low",
-            data: [],
-          },
-          {
-            label: "High",
-            data: [],
-          },
-        ],
+            label: "Impact on NMB (±)",
+            data: [0, 0, 0, 0]
+          }
+        ]
       },
       options: {
         indexAxis: "y",
         responsive: true,
-        plugins: {
-          legend: { display: true },
-        },
+        plugins: { legend: { display: false } },
         scales: {
           x: {
-            beginAtZero: true,
-          },
-        },
-      },
-    });
-
-    charts.ceac = new Chart(dom.ceacChartCanvas.getContext("2d"), {
-      type: "line",
-      data: {
-        labels: [],
-        datasets: [
-          {
-            label: "Pr(cost-effective)",
-            data: [],
-          },
-        ],
-      },
-      options: {
-        responsive: true,
-        plugins: {
-          legend: { display: false },
-        },
-        scales: {
-          y: {
-            beginAtZero: true,
-            max: 1,
-          },
-        },
-      },
-    });
-  }
-
-  function renderUptakeChart(currentUptake) {
-    const labels = ["Australia", "France", "Italy"];
-    const data = labels.map((country) => {
-      const originalCountry = state.country;
-      state.country = country;
-      const res = computeDceUptake();
-      state.country = originalCountry;
-      return res.pm;
-    });
-
-    charts.uptake.data.datasets[0].data = data;
-    charts.uptake.update();
-  }
-
-  function renderBenefitChart(benefits) {
-    charts.benefit.data.datasets[0].data = [
-      benefits.deltaV,
-      benefits.casesAverted,
-      benefits.qalyGained,
-      benefits.dalysAverted,
-      benefits.monetisedBenefits,
-    ];
-    charts.benefit.update();
-  }
-
-  function renderEconomicChart(benefits, costs) {
-    charts.economic.data.datasets[0].data = [
-      costs.totalCosts,
-      benefits.monetisedBenefits,
-    ];
-    charts.economic.update();
-  }
-
-  function renderEquityChart(equity) {
-    const labels = equity.subgroupResults.map((r) => r.group);
-    const data = equity.subgroupResults.map((r) => r.weightedQalys);
-
-    charts.equity.data.labels = labels;
-    charts.equity.data.datasets[0].data = data;
-    charts.equity.update();
-  }
-
-  function renderTornadoChart(bars) {
-    const labels = bars.map((b) => b.label);
-    const lowVals = bars.map((b) => b.low);
-    const highVals = bars.map((b) => b.high);
-
-    charts.tornado.data.labels = labels;
-    charts.tornado.data.datasets[0].data = lowVals;
-    charts.tornado.data.datasets[1].data = highVals;
-    charts.tornado.update();
-  }
-
-  function renderCeacChart(results, wtpQaly) {
-    if (!results || results.length === 0) return;
-
-    // For simplicity, CEAC across WTP grid by scaling around current wtpQaly
-    const thresholds = [];
-    const probs = [];
-
-    for (let i = 0; i <= 8; i++) {
-      const factor = 0.25 + i * 0.15; // 0.25–1.45
-      const lambda = wtpQaly * factor;
-      thresholds.push(lambda);
-
-      const nmbs = results.map((r) => r.costPerQaly);
-      const prob = results.filter((r) => r.costPerQaly <= lambda).length / results.length;
-      probs.push(prob);
-    }
-
-    charts.ceac.data.labels = thresholds.map((t) =>
-      t.toLocaleString(undefined, { maximumFractionDigits: 0 })
-    );
-    charts.ceac.data.datasets[0].data = probs;
-    charts.ceac.update();
-  }
-
-  // ---------------------------------------------------------------------------
-  // RENDERING DOM TABLES & KPI
-  // ---------------------------------------------------------------------------
-  function renderKpis(benefits, costs, econEval) {
-    const { pm, deltaP, deltaV, casesAverted, qalyGained } = benefits;
-    const { totalCosts } = costs;
-    const { nmb } = econEval;
-
-    dom.kpiUptakePm.textContent = formatNumber(pm, 2);
-    dom.kpiUptakeDelta.textContent = `Δ uptake vs baseline: ${formatNumber(
-      deltaP * 100,
-      1
-    )} pp`;
-    dom.kpiAdditionalVaccinated.textContent = formatNumber(deltaV, 0);
-    dom.kpiCasesAverted.textContent = formatNumber(casesAverted, 0);
-    dom.kpiQalysGained.textContent = formatNumber(qalyGained, 2);
-    dom.kpiTotalCost.textContent = `\$${formatNumber(totalCosts, 0)}`;
-    dom.kpiNmb.textContent = `\$${formatNumber(nmb, 0)}`;
-  }
-
-  function renderLcTable(uptakeRes) {
-    const rows = uptakeRes.classUptake
-      .map(
-        (cls) => `
-      <tr>
-        <td>${cls.name}</td>
-        <td>${formatNumber(cls.share * 100, 1)}%</td>
-        <td>${formatNumber(cls.uptake, 2)}</td>
-      </tr>`
-      )
-      .join("");
-    dom.lcUptakeTableBody.innerHTML = rows || "<tr><td colspan='3'>No LC results defined.</td></tr>";
-  }
-
-  function renderBenefitsTable(benefits) {
-    dom.tblCasesAverted.textContent = formatNumber(benefits.casesAverted, 0);
-    dom.tblHospAverted.textContent = formatNumber(benefits.hospAverted, 0);
-    dom.tblIcuAverted.textContent = formatNumber(benefits.icuAverted, 0);
-    dom.tblDeathsAverted.textContent = formatNumber(benefits.deathsAverted, 0);
-    dom.tblQalysGained.textContent = formatNumber(benefits.qalyGained, 2);
-    dom.tblDalysAverted.textContent = formatNumber(benefits.dalysAverted, 2);
-    dom.tblMonetisedBenefits.textContent = `\$${formatNumber(
-      benefits.monetisedBenefits,
-      0
-    )}`;
-  }
-
-  function renderCostsTable(costs, benefits, econEval) {
-    dom.tblPublicCosts.textContent = `\$${formatNumber(costs.publicCosts, 0)}`;
-    dom.tblEmployerCosts.textContent = `\$${formatNumber(costs.employerCosts, 0)}`;
-    dom.tblProgrammeCosts.textContent = `\$${formatNumber(costs.programmeCosts, 0)}`;
-    dom.tblSocialCosts.textContent = `\$${formatNumber(costs.socialCosts, 0)}`;
-    dom.tblTotalCosts.textContent = `\$${formatNumber(costs.totalCosts, 0)}`;
-
-    dom.tblCerVaccinated.textContent = isFinite(econEval.costPerVaccinated)
-      ? `\$${formatNumber(econEval.costPerVaccinated, 0)}`
-      : "Not defined";
-    dom.tblCerCase.textContent = isFinite(econEval.costPerCase)
-      ? `\$${formatNumber(econEval.costPerCase, 0)}`
-      : "Not defined";
-    dom.tblCerDeath.textContent = isFinite(econEval.costPerDeath)
-      ? `\$${formatNumber(econEval.costPerDeath, 0)}`
-      : "Not defined";
-    dom.tblCerQaly.textContent = isFinite(econEval.costPerQaly)
-      ? `\$${formatNumber(econEval.costPerQaly, 0)}`
-      : "Not defined";
-    dom.tblCerDaly.textContent = isFinite(econEval.costPerDaly)
-      ? `\$${formatNumber(econEval.costPerDaly, 0)}`
-      : "Not defined";
-
-    dom.tblBcr.textContent =
-      econEval.bcr && Number.isFinite(econEval.bcr)
-        ? formatNumber(econEval.bcr, 2)
-        : "Not defined";
-    dom.tblPayback.textContent = Number.isFinite(econEval.paybackTime)
-      ? formatNumber(econEval.paybackTime, 2)
-      : "Not defined";
-  }
-
-  function renderEquityTable(equity) {
-    const rows = equity.subgroupResults
-      .map(
-        (r) => `
-      <tr>
-        <td>${r.group}</td>
-        <td>${formatNumber(r.qalys, 2)}</td>
-        <td>${formatNumber(r.weight, 2)}</td>
-        <td>${formatNumber(r.weightedQalys, 2)}</td>
-      </tr>`
-      )
-      .join("");
-    dom.equityTableBody.innerHTML = rows || "<tr><td colspan='4'>No equity data.</td></tr>";
-  }
-
-  function renderDescriptiveStats() {
-    const countryStats = descriptiveStats[state.country];
-    if (!countryStats) {
-      dom.descriptiveTableBody.innerHTML =
-        "<tr><td colspan='2'>No descriptive statistics defined.</td></tr>";
-      return;
-    }
-
-    const scope = dom.descriptiveScopeSelect.value;
-    let dataObj;
-
-    if (scope === "overall") {
-      dataObj = countryStats.overall;
-    } else if (scope === "context") {
-      dataObj = countryStats[state.context] || countryStats.overall;
-    } else {
-      // class-level
-      const classes = countryStats.classes || {};
-      const rows = Object.entries(classes)
-        .map(([clsName, obj]) => {
-          const inner = Object.entries(obj)
-            .map(
-              ([k, v]) =>
-                `<tr><td>${clsName} – ${k}</td><td>${formatNumberIfNeeded(v)}</td></tr>`
-            )
-            .join("");
-          return inner;
-        })
-        .join("");
-      dom.descriptiveTableBody.innerHTML =
-        rows || "<tr><td colspan='2'>No latent class descriptive statistics.</td></tr>";
-      return;
-    }
-
-    const rows = Object.entries(dataObj || {})
-      .map(
-        ([k, v]) =>
-          `<tr><td>${k}</td><td>${formatNumberIfNeeded(v)}</td></tr>`
-      )
-      .join("");
-
-    dom.descriptiveTableBody.innerHTML =
-      rows || "<tr><td colspan='2'>No descriptive statistics.</td></tr>";
-  }
-
-  function formatNumberIfNeeded(v) {
-    if (typeof v === "number") {
-      // Heuristic: treat 0–1 as proportion
-      if (v >= 0 && v <= 1 && v !== 0 && v !== 1) {
-        return `${formatNumber(v * 100, 1)}%`;
+            ticks: {
+              callback: (v) => `AUD ${v / 1_000_000}m`
+            }
+          }
+        }
       }
-      return formatNumber(v, 2);
-    }
-    return String(v);
-  }
-
-  // ---------------------------------------------------------------------------
-  // EXPORT POLICY BRIEF (PDF)
-  // ---------------------------------------------------------------------------
-  async function exportPolicyBrief() {
-    const { jsPDF } = window.jspdf || {};
-    if (!jsPDF) return;
-
-    const uptakeRes = computeDceUptake();
-    const benefits = computeBenefits(uptakeRes);
-    const costs = computeCosts();
-    const econEval = computeEconomicEvaluation(benefits, costs);
-    const equity = computeEquity(benefits);
-
-    const doc = new jsPDF({ orientation: "p", unit: "mm", format: "a4" });
-    const margin = 14;
-    let y = margin;
-
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(14);
-    doc.text("Vaccine Mandate Policy Decision-Aid – Policy Brief", margin, y);
-    y += 8;
-
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(10);
-    doc.text(
-      `Country: ${state.country} · Outbreak context: ${state.context} · Mandate type: ${state.mandate.type}`,
-      margin,
-      y
-    );
-    y += 6;
-
-    doc.text(
-      `Target group: ${state.mandate.targetGroup} · Enforcement: ${state.mandate.enforcementIntensity}/10 · Incentives: ${state.mandate.incentives}/10`,
-      margin,
-      y
-    );
-    y += 8;
-
-    doc.setFont("helvetica", "bold");
-    doc.text("1. DCE-based uptake", margin, y);
-    y += 6;
-    doc.setFont("helvetica", "normal");
-    doc.text(
-      `Baseline uptake (p₀): ${formatNumber(state.epi.baselineUptake, 2)} · Uptake with mandate (pₘ): ${formatNumber(
-        benefits.pm,
-        2
-      )} · Δ uptake: ${formatNumber(benefits.deltaP * 100, 1)} percentage points`,
-      margin,
-      y
-    );
-    y += 6;
-    doc.text(
-      `Additional vaccinated (ΔV): ${formatNumber(benefits.deltaV, 0)}`,
-      margin,
-      y
-    );
-    y += 8;
-
-    doc.setFont("helvetica", "bold");
-    doc.text("2. Health outcomes", margin, y);
-    y += 6;
-    doc.setFont("helvetica", "normal");
-    doc.text(
-      `Cases averted: ${formatNumber(benefits.casesAverted, 0)} · Hospitalisations averted: ${formatNumber(
-        benefits.hospAverted,
-        0
-      )}`,
-      margin,
-      y
-    );
-    y += 6;
-    doc.text(
-      `ICU admissions averted: ${formatNumber(
-        benefits.icuAverted,
-        0
-      )} · Deaths averted: ${formatNumber(benefits.deathsAverted, 0)}`,
-      margin,
-      y
-    );
-    y += 6;
-    doc.text(
-      `QALYs gained: ${formatNumber(benefits.qalyGained, 2)} · DALYs averted: ${formatNumber(
-        benefits.dalysAverted,
-        2
-      )}`,
-      margin,
-      y
-    );
-    y += 8;
-
-    doc.setFont("helvetica", "bold");
-    doc.text("3. Costs and economic evaluation", margin, y);
-    y += 6;
-    doc.setFont("helvetica", "normal");
-    doc.text(
-      `Total incremental cost: $${formatNumber(costs.totalCosts, 0)} (public: $${formatNumber(
-        costs.publicCosts,
-        0
-      )}, employer: $${formatNumber(costs.employerCosts, 0)}, programme: $${formatNumber(
-        costs.programmeCosts,
-        0
-      )}, social: $${formatNumber(costs.socialCosts, 0)})`,
-      margin,
-      y
-    );
-    y += 6;
-    doc.text(
-      `Cost per QALY gained: ${
-        Number.isFinite(econEval.costPerQaly)
-          ? "$" + formatNumber(econEval.costPerQaly, 0)
-          : "Not defined"
-      }`,
-      margin,
-      y
-    );
-    y += 6;
-    doc.text(
-      `Net monetary benefit (λ = $${formatNumber(
-        state.econ.wtpQaly,
-        0
-      )}/QALY): $${formatNumber(econEval.nmb, 0)}`,
-      margin,
-      y
-    );
-    y += 6;
-    doc.text(
-      `Benefit–cost ratio: ${
-        econEval.bcr && Number.isFinite(econEval.bcr)
-          ? formatNumber(econEval.bcr, 2)
-          : "Not defined"
-      } · Payback time: ${
-        Number.isFinite(econEval.paybackTime)
-          ? formatNumber(econEval.paybackTime, 2) + " years"
-          : "Not defined"
-      }`,
-      margin,
-      y
-    );
-    y += 8;
-
-    doc.setFont("helvetica", "bold");
-    doc.text("4. Equity impacts", margin, y);
-    y += 6;
-    doc.setFont("helvetica", "normal");
-    equity.subgroupResults.forEach((r) => {
-      doc.text(
-        `${r.group}: QALYs = ${formatNumber(r.qalys, 2)}, weight = ${formatNumber(
-          r.weight,
-          2
-        )}, weighted QALYs = ${formatNumber(r.weightedQalys, 2)}`,
-        margin,
-        y
-      );
-      y += 5;
     });
+  }
+}
 
-    y += 4;
-    doc.text(
-      `Equity-weighted QALYs (sum): ${formatNumber(equity.equityWeightedQalys, 2)}`,
-      margin,
-      y
-    );
-    y += 8;
-
-    doc.setFont("helvetica", "bold");
-    doc.text("5. Interpretation notes", margin, y);
-    y += 6;
-    doc.setFont("helvetica", "normal");
-    doc.text(
-      "All results depend on the DCE parameters, epidemiological assumptions, and costing inputs specified in the dashboard. Sensitivity and probabilistic analyses should be consulted for robustness.",
-      margin,
-      y,
-      { maxWidth: 180 }
-    );
-
-    doc.save("vaccine-mandate-policy-brief.pdf");
+function updateCharts(uptake, benefits, economics, equity) {
+  if (uptakeByClassChart) {
+    uptakeByClassChart.data.datasets[0].data = [
+      uptake.mxl,
+      uptake.lcSupporters,
+      uptake.lcResisters,
+      uptake.lcWeighted
+    ];
+    uptakeByClassChart.update();
   }
 
-  // ---------------------------------------------------------------------------
-  // MAIN UPDATE PIPELINE
-  // ---------------------------------------------------------------------------
-  function updateAll() {
-    const uptakeRes = computeDceUptake();
-    const benefits = computeBenefits(uptakeRes);
-    const costs = computeCosts();
-    const econEval = computeEconomicEvaluation(benefits, costs);
-    const equity = computeEquity(benefits);
-
-    renderKpis(benefits, costs, econEval);
-    renderLcTable(uptakeRes);
-    renderBenefitsTable(benefits);
-    renderCostsTable(costs, benefits, econEval);
-    renderEquityTable(equity);
-
-    renderUptakeChart(uptakeRes);
-    renderBenefitChart(benefits);
-    renderEconomicChart(benefits, costs);
-    renderEquityChart(equity);
-    runDeterministicSensitivity(benefits, costs, econEval);
-    renderDescriptiveStats();
+  if (benefitComparisonChart) {
+    benefitComparisonChart.data.datasets[0].data = [
+      benefits.casesAverted,
+      benefits.hospAverted,
+      benefits.icuAverted,
+      benefits.deathsAverted
+    ];
+    benefitComparisonChart.update();
   }
 
-  // ---------------------------------------------------------------------------
-  // INIT
-  // ---------------------------------------------------------------------------
-  function init() {
-    cacheDom();
-    bindEvents();
-    initCharts();
-    updateAll();
+  if (equityChart) {
+    equityChart.data.datasets[0].data = [
+      equity.qalyLow,
+      equity.qalyMid,
+      equity.qalyHigh
+    ];
+    equityChart.update();
   }
 
-  document.addEventListener("DOMContentLoaded", init);
-})();
+  if (tornadoChart) {
+    const baseNMB = economics.nmb;
+    tornadoChart.data.datasets[0].data = [
+      Math.abs(baseNMB * 0.25),
+      Math.abs(baseNMB * 0.15),
+      Math.abs(baseNMB * 0.2),
+      Math.abs(baseNMB * 0.4)
+    ];
+    tornadoChart.update();
+  }
+}
+
+/* -----------------------------------------------------
+   EXPORT – Simple HTML policy brief
+----------------------------------------------------- */
+
+function exportPolicyBrief() {
+  if (!latestResults.uptake) return;
+
+  const w = window.open("", "_blank");
+  if (!w) return;
+
+  const { uptake, benefits, costs, economics, equity } = latestResults;
+
+  const html = `
+  <html>
+    <head>
+      <title>Vaccine Mandate Policy Brief</title>
+      <style>
+        body { font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; padding: 24px; color: #111827; }
+        h1, h2, h3 { margin-top: 0; }
+        h1 { font-size: 22px; }
+        h2 { font-size: 18px; margin-top: 24px; }
+        table { border-collapse: collapse; width: 100%; margin-top: 8px; }
+        th, td { border: 1px solid #e5e7eb; padding: 6px 8px; font-size: 13px; text-align: left; }
+        th { background: #f3f4f6; }
+        .tagline { color: #4b5563; margin-bottom: 4px; }
+      </style>
+    </head>
+    <body>
+      <h1>Vaccine Mandate Policy Brief – Scenario Summary</h1>
+      <div class="tagline">${appState.country} • ${appState.outbreak.toUpperCase()} outbreak context</div>
+      <p>This brief summarises predicted uptake, health benefits, costs, and cost-effectiveness for the selected vaccine-mandate configuration.</p>
+
+      <h2>Mandate Configuration</h2>
+      <table>
+        <tr><th>Country</th><td>${appState.country}</td></tr>
+        <tr><th>Outbreak context</th><td>${appState.outbreak}</td></tr>
+        <tr><th>Scope</th><td>${appState.scope === "high_risk" ? "High-risk occupations only" : "All occupations & public spaces"}</td></tr>
+        <tr><th>Exemptions</th><td>${appState.exemptions}</td></tr>
+        <tr><th>Coverage threshold</th><td>${appState.coverage}% of population vaccinated</td></tr>
+        <tr><th>Expected lives saved</th><td>${appState.livesSaved} per 100,000 population</td></tr>
+      </table>
+
+      <h2>DCE Predicted Uptake</h2>
+      <table>
+        <tr><th>Model</th><th>Predicted uptake</th></tr>
+        <tr><td>Mixed logit (mean)</td><td>${formatPercent(uptake.mxl)}</td></tr>
+        <tr><td>Latent class – supporters</td><td>${formatPercent(uptake.lcSupporters)}</td></tr>
+        <tr><td>Latent class – resisters</td><td>${formatPercent(uptake.lcResisters)}</td></tr>
+        <tr><td>Latent class – weighted</td><td>${formatPercent(uptake.lcWeighted)}</td></tr>
+        <tr><td><strong>Composite uptake</strong></td><td><strong>${formatPercent(uptake.composite)}</strong></td></tr>
+      </table>
+
+      <h2>Health Outcomes</h2>
+      <table>
+        <tr><th>Metric</th><th>Value</th></tr>
+        <tr><td>Additional vaccinated</td><td>${formatRate(benefits.additionalVaccinated)}</td></tr>
+        <tr><td>Cases averted</td><td>${formatRate(benefits.casesAverted)}</td></tr>
+        <tr><td>Hospitalisations averted</td><td>${formatRate(benefits.hospAverted)}</td></tr>
+        <tr><td>ICU admissions averted</td><td>${formatRate(benefits.icuAverted)}</td></tr>
+        <tr><td>Deaths averted</td><td>${formatRate(benefits.deathsAverted)}</td></tr>
+        <tr><td>QALYs gained</td><td>${benefits.qalyGained.toFixed(1)}</td></tr>
+        <tr><td>DALYs averted</td><td>${benefits.dalysAverted.toFixed(1)}</td></tr>
+      </table>
+
+      <h2>Costs & Economic Evaluation</h2>
+      <table>
+        <tr><th>Metric</th><th>Value</th></tr>
+        <tr><td>Total programme costs</td><td>${formatCurrency(economics.totalCosts)}</td></tr>
+        <tr><td>Monetised benefits</td><td>${formatCurrency(economics.totalBenefitsMonetised)}</td></tr>
+        <tr><td>Net present value (NPV)</td><td>${formatCurrency(economics.npv)}</td></tr>
+        <tr><td>Benefit-cost ratio</td><td>${economics.bcr.toFixed(2)}</td></tr>
+        <tr><td>Cost per additional vaccinated</td><td>${formatCurrency(economics.costPerVaccinated)}</td></tr>
+        <tr><td>Cost per case averted</td><td>${formatCurrency(economics.costPerCaseAverted)}</td></tr>
+        <tr><td>Cost per death averted</td><td>${formatCurrency(economics.costPerDeathAverted)}</td></tr>
+        <tr><td>Cost per QALY gained</td><td>${formatCurrency(economics.costPerQALY)}</td></tr>
+        <tr><td>Net monetary benefit (NMB)</td><td>${formatCurrency(economics.nmb)}</td></tr>
+      </table>
+
+      <h2>Equity Summary</h2>
+      <table>
+        <tr><th>Group</th><th>QALYs gained</th></tr>
+        <tr><td>Low SES</td><td>${equity.qalyLow.toFixed(1)}</td></tr>
+        <tr><td>Middle SES</td><td>${equity.qalyMid.toFixed(1)}</td></tr>
+        <tr><td>High SES</td><td>${equity.qalyHigh.toFixed(1)}</td></tr>
+        <tr><td><strong>Equity-weighted NMB</strong></td><td><strong>${formatCurrency(
+          equity.equityAdjustedNMB
+        )}</strong></td></tr>
+      </table>
+
+      <p style="margin-top:24px; font-size:12px; color:#6b7280;">
+        Methods: Prediction of mandate uptake is based on mixed logit and latent class models estimated from discrete choice experiment data for Australia, France, and Italy, under mild and severe outbreak vignettes. Epidemiological and costing parameters in this brief are stylised placeholders for decision-support and should be replaced with context-specific values before policy use.
+      </p>
+    </body>
+  </html>
+  `;
+
+  w.document.open();
+  w.document.write(html);
+  w.document.close();
+}
+
+/* -----------------------------------------------------
+   RENDER RESULTS INTO DASHBOARD
+----------------------------------------------------- */
+
+function renderAll() {
+  const uptake = computeUptake();
+  const benefits = computeBenefits(uptake);
+  const costs = computeCosts(uptake, benefits);
+  const economics = computeEconomicEvaluation(benefits, costs);
+  const equity = computeEquity(benefits, economics);
+
+  latestResults = { uptake, benefits, costs, economics, equity };
+
+  // Summary metrics
+  setText("metric-uptake-mxl", formatPercent(uptake.mxl));
+  setText("metric-uptake-lc", formatPercent(uptake.lcWeighted));
+  setText("metric-uptake-composite", formatPercent(uptake.composite));
+
+  setText("metric-additional-vaccinated", formatRate(benefits.additionalVaccinated));
+  setText("metric-cases-averted", formatRate(benefits.casesAverted));
+  setText("metric-deaths-averted", formatRate(benefits.deathsAverted));
+  setText("metric-qalys", benefits.qalyGained.toFixed(1));
+  setText("metric-dalys", benefits.dalysAverted.toFixed(1));
+
+  setText("metric-total-costs", formatCurrency(economics.totalCosts));
+  setText("metric-total-benefits", formatCurrency(economics.totalBenefitsMonetised));
+  setText("metric-npv", formatCurrency(economics.npv));
+  setText("metric-bcr", economics.bcr.toFixed(2));
+  setText("metric-cost-per-qaly", formatCurrency(economics.costPerQALY));
+  setText("metric-nmb", formatCurrency(economics.nmb));
+  setText(
+    "metric-equity-nmb",
+    formatCurrency(equity.equityAdjustedNMB)
+  );
+
+  // Scenario summary chips
+  setText("summary-country", appState.country === "AU" ? "Australia" : appState.country === "IT" ? "Italy" : "France");
+  setText("summary-outbreak", appState.outbreak === "mild" ? "Mild outbreak" : "Severe outbreak");
+  setText(
+    "summary-scope",
+    appState.scope === "high_risk"
+      ? "High-risk occupations only"
+      : "All occupations & public spaces"
+  );
+  setText(
+    "summary-exemptions",
+    appState.exemptions === "medical_only"
+      ? "Medical only"
+      : appState.exemptions === "med_relig"
+      ? "Medical + religious"
+      : "Medical + religious + personal belief"
+  );
+  setText("summary-coverage", `${appState.coverage}% vaccinated`);
+  setText(
+    "summary-lives",
+    `${appState.livesSaved} lives saved per 100,000`
+  );
+
+  // Charts
+  updateCharts(uptake, benefits, economics, equity);
+}
+
+/* -----------------------------------------------------
+   NAVIGATION
+----------------------------------------------------- */
+
+function initNavigation() {
+  const navItems = document.querySelectorAll(".nav-item[data-view]");
+  const sections = document.querySelectorAll(".view-section");
+
+  navItems.forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const view = btn.dataset.view;
+      navItems.forEach((b) => b.classList.remove("active"));
+      btn.classList.add("active");
+
+      sections.forEach((sec) => {
+        if (sec.id === `view-${view}`) {
+          sec.classList.add("active");
+        } else {
+          sec.classList.remove("active");
+        }
+      });
+    });
+  });
+}
+
+/* -----------------------------------------------------
+   BIND CONTROLS
+----------------------------------------------------- */
+
+function bindSegmentedControl(containerSelector, stateKey, dataKey) {
+  const container = document.querySelector(containerSelector);
+  if (!container) return;
+
+  const buttons = container.querySelectorAll(".segmented-item");
+  buttons.forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const val = btn.dataset[dataKey];
+      if (val === undefined) return;
+      appState[stateKey] = val;
+
+      buttons.forEach((b) => b.classList.remove("active"));
+      btn.classList.add("active");
+
+      renderAll();
+    });
+  });
+}
+
+function initControls() {
+  // Country, outbreak, design attributes
+  bindSegmentedControl("#countryControl", "country", "country");
+  bindSegmentedControl("#outbreakControl", "outbreak", "outbreak");
+  bindSegmentedControl("#scopeControl", "scope", "scope");
+  bindSegmentedControl("#exemptionControl", "exemptions", "exemption");
+  bindSegmentedControl("#coverageControl", "coverage", "coverage");
+
+  // Lives-saved slider
+  const livesSlider = document.getElementById("livesSlider");
+  if (livesSlider) {
+    livesSlider.addEventListener("input", () => {
+      const raw = Number(livesSlider.value || 0);
+      appState.livesSaved = raw;
+      const label = document.getElementById("livesValue");
+      if (label) label.textContent = `${raw}`;
+      renderAll();
+    });
+  }
+
+  // Population / baseline coverage, if present
+  const popInput = document.getElementById("populationInput");
+  if (popInput) {
+    popInput.addEventListener("change", () => {
+      const val = Number(popInput.value || 0);
+      if (val > 0) appState.population = val;
+      renderAll();
+    });
+  }
+
+  const baseCovInput = document.getElementById("baselineCoverageInput");
+  if (baseCovInput) {
+    baseCovInput.addEventListener("change", () => {
+      const val = Number(baseCovInput.value || 0) / 100;
+      if (val >= 0 && val <= 1) appState.baselineCoverage = val;
+      renderAll();
+    });
+  }
+
+  // Toggle for controversial costs (social / attrition)
+  const controversialToggle = document.getElementById("toggleControversialCosts");
+  if (controversialToggle) {
+    controversialToggle.addEventListener("change", () => {
+      appState.includeControversialCosts = controversialToggle.checked;
+      renderAll();
+    });
+  }
+
+  // Export button
+  const exportBtn = document.getElementById("exportBriefBtn");
+  if (exportBtn) {
+    exportBtn.addEventListener("click", exportPolicyBrief);
+  }
+}
+
+/* -----------------------------------------------------
+   INIT
+----------------------------------------------------- */
+
+document.addEventListener("DOMContentLoaded", () => {
+  initNavigation();
+  initControls();
+  initCharts();
+  renderAll();
+});
