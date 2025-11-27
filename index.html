@@ -1,615 +1,1143 @@
-<!-- index.htmll -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Vaccine Mandate Policy Decision-Aid Tool</title>
+  <title>MandEval – Vaccine Mandate Policy Decision Aid</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link
-    href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap"
-    rel="stylesheet"
+  <meta
+    name="description"
+    content="Interactive decision-aid tool for evaluating COVID-19 vaccine mandate policies across countries, outbreak scenarios, and population subgroups."
   />
-
   <link rel="stylesheet" href="styles.css" />
-
-  <!-- Charts + export libraries -->
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 </head>
-
 <body>
-  <header class="app-header">
-    <div class="app-header__title-block">
-      <h1>Vaccine Mandate Policy Decision-Aid Tool</h1>
-      <p class="app-header__subtitle">
-        Integrating discrete choice experiment (DCE) preferences, epidemiology, and
-        economic evaluation for vaccine mandate design in Australia, France, and Italy.
-      </p>
+  <div class="app-shell">
+    <!-- =========================================
+         TOP BAR
+    ========================================== -->
+    <header class="app-header">
+      <div class="header-left">
+        <div class="brand-mark">
+          <span class="brand-logo">Μ</span>
+          <div class="brand-text">
+            <span class="brand-title">MandEval</span>
+            <span class="brand-subtitle">Vaccine Mandate Policy Decision Aid</span>
+          </div>
+        </div>
+      </div>
+      <div class="header-right">
+        <div class="scenario-summary">
+          <span id="header-country-label">Australia</span>
+          <span class="divider">·</span>
+          <span id="header-scenario-label">Mild outbreak</span>
+          <span class="divider">·</span>
+          <span id="header-segment-label">Full sample</span>
+        </div>
+        <button id="btn-export-brief" class="btn btn-primary btn-sm">
+          Export policy brief
+        </button>
+      </div>
+    </header>
+
+    <div class="app-layout">
+      <!-- =========================================
+           SIDE NAV
+      ========================================== -->
+      <aside class="app-sidebar">
+        <nav class="sidebar-nav">
+          <button class="nav-item active" data-target="dashboard-view">
+            <span class="nav-label">Dashboard</span>
+          </button>
+          <button class="nav-item" data-target="design-view">
+            <span class="nav-label">Mandate design</span>
+          </button>
+          <button class="nav-item" data-target="uptake-view">
+            <span class="nav-label">Uptake &amp; behaviour</span>
+          </button>
+          <button class="nav-item" data-target="econ-view">
+            <span class="nav-label">Benefits &amp; costs</span>
+          </button>
+          <button class="nav-item" data-target="equity-view">
+            <span class="nav-label">Equity</span>
+          </button>
+          <button class="nav-item" data-target="sensitivity-view">
+            <span class="nav-label">Sensitivity</span>
+          </button>
+          <button class="nav-item" data-target="methods-view">
+            <span class="nav-label">Data &amp; methods</span>
+          </button>
+        </nav>
+      </aside>
+
+      <!-- =========================================
+           MAIN CONTENT
+      ========================================== -->
+      <main class="app-main">
+        <!-- =======================
+             DASHBOARD
+        ======================== -->
+        <section id="dashboard-view" class="view-section active">
+          <div class="grid grid-2-1">
+            <section class="card">
+              <header class="card-header">
+                <h2>Current mandate scenario</h2>
+              </header>
+              <div class="card-body" id="dashboard-current-scenario">
+                <div class="scenario-summary-grid">
+                  <div>
+                    <h3>Context</h3>
+                    <dl class="kv-list">
+                      <div>
+                        <dt>Country</dt>
+                        <dd id="db-country">Australia</dd>
+                      </div>
+                      <div>
+                        <dt>Outbreak</dt>
+                        <dd id="db-outbreak">Mild</dd>
+                      </div>
+                      <div>
+                        <dt>Population segment</dt>
+                        <dd id="db-segment">Full sample</dd>
+                      </div>
+                    </dl>
+                  </div>
+                  <div>
+                    <h3>Mandate design</h3>
+                    <dl class="kv-list">
+                      <div>
+                        <dt>Scope of mandate</dt>
+                        <dd id="db-scope">High-risk occupations only</dd>
+                      </div>
+                      <div>
+                        <dt>Exemptions</dt>
+                        <dd id="db-exemptions">Medical only</dd>
+                      </div>
+                      <div>
+                        <dt>Coverage threshold</dt>
+                        <dd id="db-coverage">Lift at 50% vaccinated</dd>
+                      </div>
+                      <div>
+                        <dt>Expected lives saved</dt>
+                        <dd id="db-lives">25 per 100,000</dd>
+                      </div>
+                    </dl>
+                  </div>
+                  <div>
+                    <h3>Headline outcomes</h3>
+                    <dl class="kv-list">
+                      <div>
+                        <dt>Predicted uptake</dt>
+                        <dd id="db-uptake">–</dd>
+                      </div>
+                      <div>
+                        <dt>QALYs gained</dt>
+                        <dd id="db-qalys">–</dd>
+                      </div>
+                      <div>
+                        <dt>Incremental cost</dt>
+                        <dd id="db-cost">–</dd>
+                      </div>
+                      <div>
+                        <dt>Cost per QALY</dt>
+                        <dd id="db-icer">–</dd>
+                      </div>
+                    </dl>
+                  </div>
+                </div>
+                <div class="scenario-actions">
+                  <button id="btn-run-evaluation" class="btn btn-primary">
+                    Run full evaluation
+                  </button>
+                  <button id="btn-save-scenario" class="btn btn-outline">
+                    Save scenario to compare
+                  </button>
+                </div>
+              </div>
+            </section>
+
+            <section class="card">
+              <header class="card-header">
+                <h2>Overview charts</h2>
+                <div class="card-header-actions">
+                  <select id="dashboard-chart-select" class="select">
+                    <option value="uptake">Predicted uptake</option>
+                    <option value="cases">Cases averted</option>
+                    <option value="qalys">QALYs gained</option>
+                    <option value="nmb">Net monetary benefit</option>
+                  </select>
+                </div>
+              </header>
+              <div class="card-body">
+                <canvas id="chart-dashboard" class="chart-canvas"></canvas>
+              </div>
+            </section>
+          </div>
+
+          <section class="card">
+            <header class="card-header">
+              <h2>Descriptive statistics</h2>
+              <div class="card-header-actions">
+                <select id="stats-country-select" class="select">
+                  <option value="AUS">Australia</option>
+                  <option value="ITA">Italy</option>
+                  <option value="FRA">France</option>
+                </select>
+                <select id="stats-outbreak-select" class="select">
+                  <option value="mild">Mild outbreak</option>
+                  <option value="severe">Severe outbreak</option>
+                </select>
+                <select id="stats-class-select" class="select">
+                  <option value="all">All respondents</option>
+                  <option value="supporters">Mandate supporters (LC)</option>
+                  <option value="resisters">Mandate resisters (LC)</option>
+                </select>
+              </div>
+            </header>
+            <div class="card-body">
+              <div id="stats-table-container" class="table-scroll">
+                <!-- JS injects descriptive statistics table -->
+              </div>
+            </div>
+          </section>
+        </section>
+
+        <!-- =======================
+             MANDATE DESIGNER
+        ======================== -->
+        <section id="design-view" class="view-section">
+          <div class="grid grid-2-1">
+            <section class="card">
+              <header class="card-header">
+                <h2>Mandate configuration</h2>
+              </header>
+              <div class="card-body form-grid">
+                <div class="form-group">
+                  <label for="country-select" class="field-label">Country</label>
+                  <select id="country-select" class="select">
+                    <option value="AUS">Australia</option>
+                    <option value="ITA">Italy</option>
+                    <option value="FRA">France</option>
+                  </select>
+                </div>
+
+                <div class="form-group">
+                  <span class="field-label">Outbreak scenario</span>
+                  <div class="segmented-control" id="outbreak-toggle">
+                    <button class="segmented-item active" data-value="mild">
+                      Mild outbreak
+                    </button>
+                    <button class="segmented-item" data-value="severe">
+                      Severe outbreak
+                    </button>
+                  </div>
+                  <p class="help-text" id="outbreak-description">
+                    Mild: flu-like illness, &lt;5 deaths per 100,000, slow growth (~5% per week),
+                    hospitals under pressure but coping.
+                  </p>
+                </div>
+
+                <div class="form-group">
+                  <label class="field-label">Population segment</label>
+                  <select id="segment-select" class="select">
+                    <option value="full">Full sample (MXL)</option>
+                    <option value="supporters">
+                      Mandate supporters (LC)
+                    </option>
+                    <option value="resisters">
+                      Mandate resisters (LC)
+                    </option>
+                  </select>
+                  <p class="help-text">
+                    Latent classes based on preference for the “No mandate” option.
+                  </p>
+                </div>
+
+                <div class="divider-horizontal"></div>
+
+                <!-- Scope -->
+                <div class="form-group full-width">
+                  <span class="field-label">
+                    Scope of mandate
+                  </span>
+                  <div class="segmented-control" id="scope-control">
+                    <button
+                      class="segmented-item active"
+                      data-value="high_risk"
+                    >
+                      High-risk occupations only
+                      <span class="help-text-inline">
+                        Vaccination required only for jobs with high exposure
+                        risk or essential public roles (e.g., healthcare
+                        workers, emergency responders).
+                      </span>
+                    </button>
+                    <button
+                      class="segmented-item"
+                      data-value="all_public"
+                    >
+                      All occupations &amp; public spaces
+                      <span class="help-text-inline">
+                        Everyone working in or entering public venues (e.g.,
+                        cinemas, malls, restaurants, public transport) must be
+                        vaccinated.
+                      </span>
+                    </button>
+                  </div>
+                </div>
+
+                <!-- Exemptions -->
+                <div class="form-group full-width">
+                  <span class="field-label">Exemption policy</span>
+                  <div class="segmented-control" id="exemption-control">
+                    <button
+                      class="segmented-item active"
+                      data-value="med_only"
+                    >
+                      Medical only
+                      <span class="help-text-inline">
+                        Only those with certified medical reasons (e.g., serious
+                        allergies) can opt out.
+                      </span>
+                    </button>
+                    <button
+                      class="segmented-item"
+                      data-value="med_religious"
+                    >
+                      Medical + religious
+                      <span class="help-text-inline">
+                        Exemptions for medical reasons or documented religious
+                        beliefs (verification required).
+                      </span>
+                    </button>
+                    <button
+                      class="segmented-item"
+                      data-value="med_religious_personal"
+                    >
+                      Medical + religious + personal belief
+                      <span class="help-text-inline">
+                        Exemptions for medical reasons, religious beliefs, or
+                        strong personal objections (broader opt-out).
+                      </span>
+                    </button>
+                  </div>
+                </div>
+
+                <!-- Coverage -->
+                <div class="form-group full-width">
+                  <span class="field-label">
+                    Coverage requirement to lift mandate
+                  </span>
+                  <div class="segmented-control" id="coverage-control">
+                    <button
+                      class="segmented-item active"
+                      data-value="50"
+                    >
+                      50% population vaccinated
+                      <span class="help-text-inline">
+                        Mandate lifted once half of the population is
+                        vaccinated.
+                      </span>
+                    </button>
+                    <button class="segmented-item" data-value="70">
+                      70% population vaccinated
+                      <span class="help-text-inline">
+                        Mandate lifted once 70% of the population is vaccinated
+                        (near-normal life can resume).
+                      </span>
+                    </button>
+                    <button class="segmented-item" data-value="90">
+                      90% population vaccinated
+                      <span class="help-text-inline">
+                        Mandate lifted once 90% of the population is vaccinated
+                        (almost everyone vaccinated).
+                      </span>
+                    </button>
+                  </div>
+                </div>
+
+                <!-- Lives saved -->
+                <div class="form-group full-width">
+                  <label for="lives-slider" class="field-label">
+                    Estimated lives saved (per 100,000 people)
+                  </label>
+                  <div class="slider-row">
+                    <input
+                      id="lives-slider"
+                      type="range"
+                      min="10"
+                      max="40"
+                      step="5"
+                      value="25"
+                    />
+                    <span id="lives-value" class="slider-value">25</span>
+                    <span class="slider-unit">lives per 100,000</span>
+                  </div>
+                  <p class="help-text">
+                    The DCE design used discrete levels at 10, 25, 35, and 40
+                    lives saved per 100,000. Values will be mapped to the
+                    nearest design level when computing utilities.
+                  </p>
+                </div>
+              </div>
+            </section>
+
+            <section class="card">
+              <header class="card-header">
+                <h2>Utility and uptake summary</h2>
+              </header>
+              <div class="card-body">
+                <div class="utility-summary-grid">
+                  <div class="metric-block">
+                    <span class="metric-label">Average utility (policy A)</span>
+                    <span id="metric-utility-policy-a" class="metric-value">
+                      –
+                    </span>
+                  </div>
+                  <div class="metric-block">
+                    <span class="metric-label">
+                      Average utility (policy B baseline)
+                    </span>
+                    <span id="metric-utility-policy-b" class="metric-value">
+                      0.00
+                    </span>
+                  </div>
+                  <div class="metric-block">
+                    <span class="metric-label">Utility (no mandate)</span>
+                    <span id="metric-utility-optout" class="metric-value">
+                      –
+                    </span>
+                  </div>
+                  <div class="metric-block">
+                    <span class="metric-label">
+                      Predicted uptake – any mandate
+                    </span>
+                    <span id="metric-uptake-mandate" class="metric-value">
+                      –
+                    </span>
+                  </div>
+                  <div class="metric-block">
+                    <span class="metric-label">
+                      Predicted uptake – policy A
+                    </span>
+                    <span id="metric-uptake-policy-a" class="metric-value">
+                      –
+                    </span>
+                  </div>
+                  <div class="metric-block">
+                    <span class="metric-label">
+                      Predicted share choosing no mandate
+                    </span>
+                    <span id="metric-uptake-optout" class="metric-value">
+                      –
+                    </span>
+                  </div>
+                </div>
+
+                <div class="chart-row">
+                  <canvas
+                    id="chart-uptake-by-class"
+                    class="chart-canvas"
+                  ></canvas>
+                </div>
+
+                <p class="help-text">
+                  Uptake predictions are based on country- and scenario-specific
+                  mixed logit estimates, combined with latent classes
+                  distinguishing “mandate-supporters” and “mandate-resisters”.
+                </p>
+              </div>
+            </section>
+          </div>
+        </section>
+
+        <!-- =======================
+             UPTAKE & BEHAVIOUR
+        ======================== -->
+        <section id="uptake-view" class="view-section">
+          <div class="grid grid-2-1">
+            <section class="card">
+              <header class="card-header">
+                <h2>Uptake by subgroup</h2>
+                <div class="card-header-actions">
+                  <select id="uptake-subgroup-select" class="select">
+                    <option value="age">Age group</option>
+                    <option value="ses">Socioeconomic status</option>
+                    <option value="attitude">Vaccine attitude</option>
+                    <option value="trust">Institutional trust</option>
+                  </select>
+                </div>
+              </header>
+              <div class="card-body">
+                <canvas id="chart-uptake-subgroup" class="chart-canvas"></canvas>
+              </div>
+            </section>
+
+            <section class="card">
+              <header class="card-header">
+                <h2>Class composition</h2>
+              </header>
+              <div class="card-body">
+                <canvas
+                  id="chart-class-shares"
+                  class="chart-canvas"
+                ></canvas>
+                <p class="help-text">
+                  Latent classes separate respondents with a strong preference
+                  for “No mandate” from those who systematically trade off scope,
+                  exemptions, coverage thresholds, and lives saved.
+                </p>
+              </div>
+            </section>
+          </div>
+
+          <section class="card">
+            <header class="card-header">
+              <h2>Cross-country comparison</h2>
+              <div class="card-header-actions">
+                <select id="uptake-cross-metric-select" class="select">
+                  <option value="uptake">
+                    Mandate uptake
+                  </option>
+                  <option value="cases_averted">
+                    Cases averted
+                  </option>
+                  <option value="qalys">
+                    QALYs gained
+                  </option>
+                  <option value="nmb">
+                    Net monetary benefit
+                  </option>
+                </select>
+              </div>
+            </header>
+            <div class="card-body">
+              <canvas
+                id="chart-uptake-cross-country"
+                class="chart-canvas"
+              ></canvas>
+            </div>
+          </section>
+        </section>
+
+        <!-- =======================
+             ECONOMIC EVALUATION
+        ======================== -->
+        <section id="econ-view" class="view-section">
+          <div class="grid grid-2-1">
+            <section class="card">
+              <header class="card-header">
+                <h2>Benefit definition</h2>
+                <div class="card-header-actions">
+                  <select id="benefit-metric-select" class="select">
+                    <option value="A">A · Additional vaccinated</option>
+                    <option value="B_static">B · Cases averted (static)</option>
+                    <option value="B_seir">B · Cases averted (SEIR)</option>
+                    <option value="B_longcovid">B · Long-COVID morbidity</option>
+                    <option value="C">C · Hosp/ICU/deaths averted</option>
+                    <option value="D">D · QALYs gained</option>
+                    <option value="E">E · DALYs averted</option>
+                    <option value="F">F · Monetised benefits</option>
+                    <option value="G">G · Equity-weighted benefits</option>
+                  </select>
+                </div>
+              </header>
+              <div class="card-body">
+                <div class="grid grid-2">
+                  <div class="metric-block">
+                    <span class="metric-label">ΔV – Additional vaccinated</span>
+                    <span id="metric-delta-v" class="metric-value">–</span>
+                  </div>
+                  <div class="metric-block">
+                    <span class="metric-label">Cases averted</span>
+                    <span id="metric-cases-averted" class="metric-value">–</span>
+                  </div>
+                  <div class="metric-block">
+                    <span class="metric-label">Hosp/ICU admissions averted</span>
+                    <span id="metric-hosp-averted" class="metric-value">–</span>
+                  </div>
+                  <div class="metric-block">
+                    <span class="metric-label">Deaths averted</span>
+                    <span id="metric-deaths-averted" class="metric-value">–</span>
+                  </div>
+                  <div class="metric-block">
+                    <span class="metric-label">QALYs gained</span>
+                    <span id="metric-qalys-gained" class="metric-value">–</span>
+                  </div>
+                  <div class="metric-block">
+                    <span class="metric-label">DALYs averted</span>
+                    <span id="metric-dalys-averted" class="metric-value">–</span>
+                  </div>
+                  <div class="metric-block">
+                    <span class="metric-label">Monetised benefits</span>
+                    <span id="metric-benefit-monetary" class="metric-value">
+                      –
+                    </span>
+                  </div>
+                  <div class="metric-block">
+                    <span class="metric-label">Equity-weighted NMB</span>
+                    <span id="metric-equity-nmb" class="metric-value">–</span>
+                  </div>
+                </div>
+                <div class="chart-row">
+                  <canvas id="chart-benefits" class="chart-canvas"></canvas>
+                </div>
+              </div>
+            </section>
+
+            <section class="card">
+              <header class="card-header">
+                <h2>Cost catalogue</h2>
+              </header>
+              <div class="card-body">
+                <div class="cost-toggles">
+                  <h3>Public-sector costs</h3>
+                  <div class="toggle-list">
+                    <label class="toggle">
+                      <input
+                        type="checkbox"
+                        id="cost-policy-drafting"
+                        checked
+                      />
+                      <span>Mandate policy drafting &amp; legal preparation</span>
+                    </label>
+                    <label class="toggle">
+                      <input type="checkbox" id="cost-comms" checked />
+                      <span>Communications &amp; public campaigns</span>
+                    </label>
+                    <label class="toggle">
+                      <input type="checkbox" id="cost-it-systems" checked />
+                      <span>IT / certificate systems</span>
+                    </label>
+                    <label class="toggle">
+                      <input type="checkbox" id="cost-enforcement" checked />
+                      <span>Enforcement, inspections &amp; exemption processing</span>
+                    </label>
+                    <label class="toggle">
+                      <input
+                        type="checkbox"
+                        id="cost-vacc-capacity"
+                        checked
+                      />
+                      <span>Additional vaccination capacity</span>
+                    </label>
+                  </div>
+
+                  <h3>Employer-side costs</h3>
+                  <div class="toggle-list">
+                    <label class="toggle">
+                      <input type="checkbox" id="cost-hr-time" checked />
+                      <span>Management &amp; HR implementation time</span>
+                    </label>
+                    <label class="toggle">
+                      <input type="checkbox" id="cost-pto-vax" checked />
+                      <span>Paid time off for vaccination &amp; recovery</span>
+                    </label>
+                    <label class="toggle">
+                      <input type="checkbox" id="cost-testing" />
+                      <span>Testing costs (test-or-vaccinate)</span>
+                    </label>
+                    <label class="toggle">
+                      <input type="checkbox" id="cost-attrition" />
+                      <span>Staff attrition and replacement hiring</span>
+                    </label>
+                  </div>
+
+                  <h3>Programme delivery costs</h3>
+                  <div class="toggle-list">
+                    <label class="toggle">
+                      <input type="checkbox" id="cost-procurement" checked />
+                      <span>Vaccine procurement</span>
+                    </label>
+                    <label class="toggle">
+                      <input type="checkbox" id="cost-coldchain" checked />
+                      <span>Cold chain, logistics &amp; transport</span>
+                    </label>
+                    <label class="toggle">
+                      <input type="checkbox" id="cost-staff" checked />
+                      <span>Vaccinator salaries &amp; supervision</span>
+                    </label>
+                    <label class="toggle">
+                      <input type="checkbox" id="cost-capital" />
+                      <span>Capital equipment (annualised)</span>
+                    </label>
+                    <label class="toggle">
+                      <input type="checkbox" id="cost-overhead" />
+                      <span>Utilities &amp; overhead</span>
+                    </label>
+                  </div>
+
+                  <h3>Social / political costs</h3>
+                  <div class="toggle-list">
+                    <label class="toggle">
+                      <input type="checkbox" id="cost-trust" />
+                      <span>Trust erosion &amp; polarisation</span>
+                    </label>
+                    <label class="toggle">
+                      <input type="checkbox" id="cost-protests" />
+                      <span>Protests &amp; unrest</span>
+                    </label>
+                    <label class="toggle">
+                      <input type="checkbox" id="cost-unmet-care" />
+                      <span>Unmet care due to workforce attrition</span>
+                    </label>
+                  </div>
+                </div>
+              </div>
+            </section>
+          </div>
+
+          <section class="card">
+            <header class="card-header">
+              <h2>Cost–effectiveness and cost–benefit outputs</h2>
+            </header>
+            <div class="card-body">
+              <div class="grid grid-3">
+                <div class="metric-block">
+                  <span class="metric-label">Total incremental cost</span>
+                  <span id="metric-total-cost" class="metric-value">–</span>
+                </div>
+                <div class="metric-block">
+                  <span class="metric-label">Total monetised benefits</span>
+                  <span id="metric-total-benefit" class="metric-value">–</span>
+                </div>
+                <div class="metric-block">
+                  <span class="metric-label">Net present value (NPV)</span>
+                  <span id="metric-npv" class="metric-value">–</span>
+                </div>
+                <div class="metric-block">
+                  <span class="metric-label">Benefit–cost ratio</span>
+                  <span id="metric-bcr" class="metric-value">–</span>
+                </div>
+                <div class="metric-block">
+                  <span class="metric-label">Payback time</span>
+                  <span id="metric-payback" class="metric-value">–</span>
+                </div>
+                <div class="metric-block">
+                  <span class="metric-label">Cost per QALY gained</span>
+                  <span id="metric-icer-qaly" class="metric-value">–</span>
+                </div>
+                <div class="metric-block">
+                  <span class="metric-label">Cost per case averted</span>
+                  <span id="metric-icer-case" class="metric-value">–</span>
+                </div>
+                <div class="metric-block">
+                  <span class="metric-label">Cost per death averted</span>
+                  <span id="metric-icer-death" class="metric-value">–</span>
+                </div>
+                <div class="metric-block">
+                  <span class="metric-label">Net monetary benefit</span>
+                  <span id="metric-nmb" class="metric-value">–</span>
+                </div>
+              </div>
+
+              <div class="grid grid-2">
+                <div>
+                  <canvas
+                    id="chart-cost-breakdown"
+                    class="chart-canvas"
+                  ></canvas>
+                </div>
+                <div>
+                  <canvas
+                    id="chart-nmb-comparison"
+                    class="chart-canvas"
+                  ></canvas>
+                </div>
+              </div>
+            </div>
+          </section>
+        </section>
+
+        <!-- =======================
+             EQUITY
+        ======================== -->
+        <section id="equity-view" class="view-section">
+          <div class="grid grid-2-1">
+            <section class="card">
+              <header class="card-header">
+                <h2>Distribution of health gains</h2>
+                <div class="card-header-actions">
+                  <select id="equity-dimension-select" class="select">
+                    <option value="ses">Socioeconomic quintile</option>
+                    <option value="age">Age group</option>
+                    <option value="country">Country</option>
+                  </select>
+                </div>
+              </header>
+              <div class="card-body">
+                <canvas
+                  id="chart-equity-distribution"
+                  class="chart-canvas"
+                ></canvas>
+              </div>
+            </section>
+
+            <section class="card">
+              <header class="card-header">
+                <h2>Equity metrics</h2>
+              </header>
+              <div class="card-body">
+                <div class="grid grid-2">
+                  <div class="metric-block">
+                    <span class="metric-label">Concentration index</span>
+                    <span
+                      id="metric-concentration-index"
+                      class="metric-value"
+                    >
+                      –
+                    </span>
+                  </div>
+                  <div class="metric-block">
+                    <span class="metric-label">
+                      Equity-weighted cost per QALY
+                    </span>
+                    <span
+                      id="metric-equity-icer-qaly"
+                      class="metric-value"
+                    >
+                      –
+                    </span>
+                  </div>
+                  <div class="metric-block">
+                    <span class="metric-label">
+                      Equity-weighted NMB
+                    </span>
+                    <span
+                      id="metric-equity-weighted-nmb"
+                      class="metric-value"
+                    >
+                      –
+                    </span>
+                  </div>
+                  <div class="metric-block">
+                    <span class="metric-label">
+                      Priority to disadvantaged groups
+                    </span>
+                    <span
+                      id="metric-priority-disadvantaged"
+                      class="metric-value"
+                    >
+                      –
+                    </span>
+                  </div>
+                </div>
+                <p class="help-text">
+                  Equity-weighted outcomes apply Cookson-style distributional
+                  weights, allowing comparisons between unweighted and
+                  equity-adjusted net benefits.
+                </p>
+              </div>
+            </section>
+          </div>
+        </section>
+
+        <!-- =======================
+             SENSITIVITY
+        ======================== -->
+        <section id="sensitivity-view" class="view-section">
+          <div class="grid grid-2-1">
+            <section class="card">
+              <header class="card-header">
+                <h2>Deterministic sensitivity analysis</h2>
+              </header>
+              <div class="card-body">
+                <div class="form-grid">
+                  <div class="form-group">
+                    <label class="field-label" for="sa-ve-slider">
+                      Vaccine effectiveness (VE)
+                    </label>
+                    <div class="slider-row">
+                      <input
+                        id="sa-ve-slider"
+                        type="range"
+                        min="0.4"
+                        max="0.95"
+                        step="0.01"
+                        value="0.8"
+                      />
+                      <span id="sa-ve-value" class="slider-value">0.80</span>
+                    </div>
+                  </div>
+
+                  <div class="form-group">
+                    <label class="field-label" for="sa-r0-slider">
+                      Transmission (R<sub>0</sub>)
+                    </label>
+                    <div class="slider-row">
+                      <input
+                        id="sa-r0-slider"
+                        type="range"
+                        min="1.1"
+                        max="5"
+                        step="0.1"
+                        value="2.5"
+                      />
+                      <span id="sa-r0-value" class="slider-value">2.5</span>
+                    </div>
+                  </div>
+
+                  <div class="form-group">
+                    <label class="field-label" for="sa-vsl-slider">
+                      Value of a statistical life (VSL)
+                    </label>
+                    <div class="slider-row">
+                      <input
+                        id="sa-vsl-slider"
+                        type="range"
+                        min="1000000"
+                        max="10000000"
+                        step="250000"
+                        value="4000000"
+                      />
+                      <span id="sa-vsl-value" class="slider-value">
+                        4.0m
+                      </span>
+                    </div>
+                  </div>
+
+                  <div class="form-group">
+                    <label class="field-label" for="sa-discount-slider">
+                      Discount rate
+                    </label>
+                    <div class="slider-row">
+                      <input
+                        id="sa-discount-slider"
+                        type="range"
+                        min="0"
+                        max="0.1"
+                        step="0.005"
+                        value="0.03"
+                      />
+                      <span id="sa-discount-value" class="slider-value">
+                        3.0%
+                      </span>
+                    </div>
+                  </div>
+
+                  <div class="form-group">
+                    <label class="field-label" for="sa-cost-multiplier">
+                      Programme cost multiplier
+                    </label>
+                    <div class="slider-row">
+                      <input
+                        id="sa-cost-multiplier"
+                        type="range"
+                        min="0.5"
+                        max="2"
+                        step="0.05"
+                        value="1"
+                      />
+                      <span id="sa-cost-value" class="slider-value">1.00</span>
+                    </div>
+                  </div>
+
+                  <div class="form-group">
+                    <label class="field-label" for="sa-employer-multiplier">
+                      Employer cost multiplier
+                    </label>
+                    <div class="slider-row">
+                      <input
+                        id="sa-employer-multiplier"
+                        type="range"
+                        min="0.5"
+                        max="2"
+                        step="0.05"
+                        value="1"
+                      />
+                      <span id="sa-employer-value" class="slider-value">
+                        1.00
+                      </span>
+                    </div>
+                  </div>
+                </div>
+                <button id="btn-run-dsa" class="btn btn-primary">
+                  Update deterministic sensitivity
+                </button>
+              </div>
+            </section>
+
+            <section class="card">
+              <header class="card-header">
+                <h2>Tornado diagram</h2>
+              </header>
+              <div class="card-body">
+                <canvas
+                  id="chart-tornado"
+                  class="chart-canvas"
+                ></canvas>
+              </div>
+            </section>
+          </div>
+
+          <section class="card">
+            <header class="card-header">
+              <h2>Probabilistic sensitivity analysis</h2>
+              <div class="card-header-actions">
+                <label class="field-label" for="psa-runs-input">
+                  Number of simulations
+                </label>
+                <input
+                  id="psa-runs-input"
+                  type="number"
+                  class="input"
+                  min="100"
+                  max="10000"
+                  step="100"
+                  value="1000"
+                />
+                <button id="btn-run-psa" class="btn btn-outline">
+                  Run PSA
+                </button>
+              </div>
+            </header>
+            <div class="card-body">
+              <div class="grid grid-2">
+                <div>
+                  <h3 class="chart-title">
+                    Cost–effectiveness acceptability curve
+                  </h3>
+                  <canvas
+                    id="chart-ceac"
+                    class="chart-canvas"
+                  ></canvas>
+                </div>
+                <div>
+                  <h3 class="chart-title">
+                    Distribution of incremental NMB
+                  </h3>
+                  <canvas
+                    id="chart-nmb-density"
+                    class="chart-canvas"
+                  ></canvas>
+                </div>
+              </div>
+            </div>
+          </section>
+        </section>
+
+        <!-- =======================
+             METHODS / DOCUMENTATION
+        ======================== -->
+        <section id="methods-view" class="view-section">
+          <section class="card">
+            <header class="card-header">
+              <h2>Data &amp; methods</h2>
+            </header>
+            <div class="card-body methods-body">
+              <h3>Discrete choice experiment and mandate attributes</h3>
+              <p>
+                The tool is powered by discrete choice experiment (DCE) data
+                collected in Australia, Italy, and France. Each choice task
+                presented two vaccine mandate policies and a “no mandate”
+                option. Mandates were described using four attributes:
+              </p>
+              <ul>
+                <li>
+                  <strong>Scope of mandate</strong>:
+                  <em>High-risk occupations only</em> vs
+                  <em>All occupations &amp; public spaces</em>.
+                </li>
+                <li>
+                  <strong>Exemption policy</strong>:
+                  <em>Medical only</em>,
+                  <em>Medical + religious</em>, or
+                  <em>Medical + religious + personal belief</em>.
+                </li>
+                <li>
+                  <strong>Coverage requirement to lift mandate</strong>:
+                  mandate lifted at <em>50%</em>, <em>70%</em>, or
+                  <em>90%</em> of the population vaccinated.
+                </li>
+                <li>
+                  <strong>Estimated lives saved</strong>:
+                  <em>10, 25, 35</em>, or <em>40</em> lives saved per 100,000
+                  people.
+                </li>
+              </ul>
+
+              <h3>Outbreak scenarios</h3>
+              <p>
+                The DCE was fielded under two epidemiological frames. In the
+                <strong>mild outbreak</strong> scenario, the virus was described
+                as causing mostly flu-like illness, with fewer than 5 deaths per
+                100,000, slow growth in cases (~5% per week), and hospitals
+                under pressure but coping. In the
+                <strong>severe outbreak</strong> scenario, more than 15 deaths
+                per 100,000, rapid growth (~20% per week), and hospitals near
+                capacity were described, with mandates framed as urgent tools to
+                save lives and protect health systems.
+              </p>
+
+              <h3>Preference models</h3>
+              <p>
+                For each country–scenario combination, mixed logit (MXL) models
+                in preference space were estimated using panel data, with
+                normally distributed random parameters for all attributes. The
+                model captures unobserved heterogeneity in preferences for
+                mandate scope, exemptions, coverage thresholds, and expected
+                lives saved. Latent class (LC) logit models identified
+                <em>mandate-supporter</em> and <em>mandate-resister</em> classes
+                based on the alternative-specific constant for the “No mandate”
+                option. Class membership was related to covariates including
+                trust, vaccine attitudes, numeracy, political orientation, and
+                demographics.
+              </p>
+              <p>
+                The tool combines the MXL and LC results into a composite uptake
+                engine. Utilities are evaluated at the chosen mandate design,
+                converted into choice probabilities using the logit formula, and
+                aggregated across individuals or classes to obtain predicted
+                uptake by country, scenario, and subgroup.
+              </p>
+
+              <h3>Epidemiological and economic modelling</h3>
+              <p>
+                Benefit modules implement static attack-rate calculations and
+                SEIR-style transmission dynamics to translate increased
+                vaccination uptake into cases, hospitalisations, and deaths
+                averted, including long-COVID morbidity. QALYs and DALYs are
+                computed from mortality and morbidity profiles, with optional
+                equity weights and monetisation using country-specific values of
+                a statistical life (VSL) or value per life-year. Cost modules
+                draw on international guidance (e.g., OSHA, CMS, WHO costing
+                manuals, CDC, Gavi, NACI) to represent public-sector,
+                employer-side, and vaccination-programme costs. Deterministic
+                and probabilistic sensitivity analysis modules allow users to
+                explore the robustness of cost–effectiveness conclusions to
+                uncertainty in key parameters.
+              </p>
+
+              <p class="disclaimer">
+                This decision-aid is designed for scenario exploration and
+                high-level economic evaluation. It does not replace detailed
+                country-specific modelling, regulatory appraisal, or ethical
+                deliberation. All parameter values and assumptions should be
+                reviewed and adapted before use in formal policy processes.
+              </p>
+            </div>
+          </section>
+        </section>
+      </main>
     </div>
-    <div class="app-header__actions">
-      <button id="export-btn" class="btn btn--primary">Export policy brief (PDF)</button>
-    </div>
-  </header>
 
-  <main class="app-main">
-    <!-- LEFT SIDEBAR: CONFIGURATION -->
-    <aside class="sidebar">
-      <section class="panel">
-        <h2 class="panel__title">1. Context</h2>
-        <div class="field">
-          <label for="country-select">Country</label>
-          <select id="country-select" class="input js-auto-update">
-            <option value="AU">Australia</option>
-            <option value="IT">Italy</option>
-            <option value="FR">France</option>
-          </select>
-        </div>
+    <!-- =========================================
+         FOOTER
+    ========================================== -->
+    <footer class="app-footer">
+      <div class="footer-left">
+        <span>MandEval Vaccine Mandate Decision Aid</span>
+        <span class="divider">·</span>
+        <span>Prototype – for research and policy analysis</span>
+      </div>
+      <div class="footer-right">
+        <span id="footer-tagline">
+          Powered by DCE models for Australia, Italy, and France
+        </span>
+      </div>
+    </footer>
+  </div>
 
-        <div class="field field--inline">
-          <div>
-            <label for="scenario-select">Outbreak scenario</label>
-            <select id="scenario-select" class="input js-auto-update">
-              <option value="mild">Mild outbreak</option>
-              <option value="severe">Severe outbreak</option>
-            </select>
-          </div>
-          <div>
-            <label for="baseline-uptake-input">Baseline vaccination (%)</label>
-            <input
-              id="baseline-uptake-input"
-              class="input js-auto-update"
-              type="number"
-              min="0"
-              max="100"
-              step="1"
-              value="70"
-            />
-          </div>
-        </div>
-
-        <div class="field">
-          <label for="population-input">Population size (people)</label>
-          <input
-            id="population-input"
-            class="input js-auto-update"
-            type="number"
-            min="0"
-            step="10000"
-            value="25000000"
-          />
-        </div>
-      </section>
-
-      <section class="panel">
-        <h2 class="panel__title">2. Mandate design</h2>
-
-        <div class="field">
-          <label for="scope-select">Scope of mandate</label>
-          <select id="scope-select" class="input js-auto-update">
-            <option value="high_risk">High-risk occupations only</option>
-            <option value="all_public">All occupations &amp; public spaces</option>
-          </select>
-          <p class="field__hint">
-            Who is required to be vaccinated.
-          </p>
-        </div>
-
-        <div class="field">
-          <label for="exemptions-select">Exemption policy</label>
-          <select id="exemptions-select" class="input js-auto-update">
-            <option value="medical_only">Medical only</option>
-            <option value="medical_religious">Medical + religious</option>
-            <option value="medical_religious_personal">
-              Medical + religious + personal belief
-            </option>
-          </select>
-        </div>
-
-        <div class="field">
-          <label for="coverage-select">Coverage requirement to lift mandate</label>
-          <select id="coverage-select" class="input js-auto-update">
-            <option value="cov50">50% of population vaccinated</option>
-            <option value="cov70">70% of population vaccinated</option>
-            <option value="cov90">90% of population vaccinated</option>
-          </select>
-        </div>
-
-        <div class="field">
-          <label for="lives-select">Estimated lives saved (per 100,000)</label>
-          <select id="lives-select" class="input js-auto-update">
-            <option value="10">10</option>
-            <option value="25">25</option>
-            <option value="35">35</option>
-            <option value="40">40</option>
-          </select>
-        </div>
-      </section>
-
-      <section class="panel">
-        <h2 class="panel__title">3. Epidemiology</h2>
-
-        <div class="field field--inline">
-          <div>
-            <label for="ve-input">Vaccine effectiveness (VE, %)</label>
-            <input
-              id="ve-input"
-              type="number"
-              class="input js-auto-update"
-              min="0"
-              max="100"
-              step="1"
-              value="70"
-            />
-          </div>
-          <div>
-            <label for="attack-rate-input">Attack rate without mandate (%)</label>
-            <input
-              id="attack-rate-input"
-              type="number"
-              class="input js-auto-update"
-              min="0"
-              max="100"
-              step="1"
-              value="20"
-            />
-          </div>
-        </div>
-
-        <div class="field field--inline">
-          <div>
-            <label for="hosp-risk-input">Hospitalisation risk (per case, %)</label>
-            <input
-              id="hosp-risk-input"
-              type="number"
-              class="input js-auto-update"
-              min="0"
-              max="100"
-              step="0.1"
-              value="5"
-            />
-          </div>
-          <div>
-            <label for="death-risk-input">Death risk (per case, %)</label>
-            <input
-              id="death-risk-input"
-              type="number"
-              class="input js-auto-update"
-              min="0"
-              max="100"
-              step="0.1"
-              value="1"
-            />
-          </div>
-        </div>
-
-        <div class="field field--inline">
-          <div>
-            <label for="qaly-case-input">QALY loss per non-fatal case</label>
-            <input
-              id="qaly-case-input"
-              type="number"
-              class="input js-auto-update"
-              min="0"
-              step="0.001"
-              value="0.01"
-            />
-          </div>
-          <div>
-            <label for="qaly-death-input">QALY loss per death</label>
-            <input
-              id="qaly-death-input"
-              type="number"
-              class="input js-auto-update"
-              min="0"
-              step="0.1"
-              value="20"
-            />
-          </div>
-        </div>
-      </section>
-
-      <section class="panel">
-        <h2 class="panel__title">4. Costs &amp; WTP</h2>
-
-        <div class="field">
-          <label for="program-cost-input">Public-sector programme cost (total, $)</label>
-          <input
-            id="program-cost-input"
-            type="number"
-            class="input js-auto-update"
-            min="0"
-            step="100000"
-            value="50000000"
-          />
-        </div>
-
-        <div class="field">
-          <label for="employer-cost-input">Employer-side costs (total, $)</label>
-          <input
-            id="employer-cost-input"
-            type="number"
-            class="input js-auto-update"
-            min="0"
-            step="100000"
-            value="20000000"
-          />
-        </div>
-
-        <div class="field field--inline">
-          <div>
-            <label for="cost-per-vacc-input">Cost per vaccination (all-in, $)</label>
-            <input
-              id="cost-per-vacc-input"
-              type="number"
-              class="input js-auto-update"
-              min="0"
-              step="1"
-              value="30"
-            />
-          </div>
-          <div>
-            <label for="doses-per-person-input">Doses per person</label>
-            <input
-              id="doses-per-person-input"
-              type="number"
-              class="input js-auto-update"
-              min="1"
-              step="1"
-              value="2"
-            />
-          </div>
-        </div>
-
-        <div class="field field--inline">
-          <div>
-            <label for="cost-per-case-input">Medical cost per non-hospital case ($)</label>
-            <input
-              id="cost-per-case-input"
-              type="number"
-              class="input js-auto-update"
-              min="0"
-              step="1"
-              value="200"
-            />
-          </div>
-          <div>
-            <label for="cost-per-hosp-input">Medical cost per hospitalisation ($)</label>
-            <input
-              id="cost-per-hosp-input"
-              type="number"
-              class="input js-auto-update"
-              min="0"
-              step="1"
-              value="10000"
-            />
-          </div>
-        </div>
-
-        <div class="field">
-          <label for="cost-per-death-input">End-of-life medical cost per death ($)</label>
-          <input
-            id="cost-per-death-input"
-            type="number"
-            class="input js-auto-update"
-            min="0"
-            step="1"
-            value="15000"
-          />
-        </div>
-
-        <div class="field field--inline">
-          <div>
-            <label for="vsl-input">Value of a statistical life (VSL, $)</label>
-            <input
-              id="vsl-input"
-              type="number"
-              class="input js-auto-update"
-              min="0"
-              step="100000"
-              value="5000000"
-            />
-          </div>
-          <div>
-            <label for="wtp-input">WTP per QALY (λ, $)</label>
-            <input
-              id="wtp-input"
-              type="number"
-              class="input js-auto-update"
-              min="0"
-              step="1000"
-              value="50000"
-            />
-          </div>
-        </div>
-
-        <div class="field field--inline">
-          <div>
-            <label for="discount-rate-input">Discount rate (%)</label>
-            <input
-              id="discount-rate-input"
-              type="number"
-              class="input js-auto-update"
-              min="0"
-              max="10"
-              step="0.5"
-              value="3"
-            />
-          </div>
-          <div>
-            <label for="time-horizon-input">Time horizon (years)</label>
-            <input
-              id="time-horizon-input"
-              type="number"
-              class="input js-auto-update"
-              min="1"
-              max="10"
-              step="1"
-              value="1"
-            />
-          </div>
-        </div>
-      </section>
-
-      <section class="panel">
-        <h2 class="panel__title">5. Equity &amp; social costs</h2>
-
-        <div class="field">
-          <label>Share of QALY gains by SES group</label>
-          <div class="field--inline">
-            <input
-              id="share-low-input"
-              class="input js-auto-update"
-              type="number"
-              min="0"
-              step="0.01"
-              value="0.4"
-            />
-            <input
-              id="share-mid-input"
-              class="input js-auto-update"
-              type="number"
-              min="0"
-              step="0.01"
-              value="0.35"
-            />
-            <input
-              id="share-high-input"
-              class="input js-auto-update"
-              type="number"
-              min="0"
-              step="0.01"
-              value="0.25"
-            />
-          </div>
-          <p class="field__hint">
-            Values will be normalised to sum to 1. (Low / middle / high SES.)
-          </p>
-        </div>
-
-        <div class="field field--inline">
-          <div>
-            <label for="epsilon-input">Equity aversion parameter (ε)</label>
-            <input
-              id="epsilon-input"
-              class="input js-auto-update"
-              type="number"
-              min="0"
-              max="3"
-              step="0.1"
-              value="1"
-            />
-          </div>
-          <div>
-            <label for="social-cost-input">Additional social/political costs ($)</label>
-            <input
-              id="social-cost-input"
-              class="input js-auto-update"
-              type="number"
-              min="0"
-              step="100000"
-              value="0"
-            />
-          </div>
-        </div>
-      </section>
-    </aside>
-
-    <!-- RIGHT SIDE: RESULTS / POLICY BRIEF -->
-    <section class="content" id="policy-brief">
-      <section class="summary-grid">
-        <article class="summary-card">
-          <h3>Composite uptake</h3>
-          <p class="summary-card__primary">
-            <span id="uptake-combined-span">–</span>
-          </p>
-          <p class="summary-card__secondary">
-            MXL: <span id="uptake-mxl-span">–</span> · LC: <span id="uptake-lc-span">–</span>
-          </p>
-        </article>
-
-        <article class="summary-card">
-          <h3>Health impact</h3>
-          <p class="summary-card__primary">
-            <span id="cases-averted-span">–</span> cases averted
-          </p>
-          <p class="summary-card__secondary">
-            <span id="deaths-averted-span">–</span> deaths averted
-          </p>
-        </article>
-
-        <article class="summary-card">
-          <h3>QALYs &amp; DALYs</h3>
-          <p class="summary-card__primary">
-            <span id="qaly-span">–</span> QALYs gained
-          </p>
-          <p class="summary-card__secondary">
-            <span id="daly-span">–</span> DALYs averted
-          </p>
-        </article>
-
-        <article class="summary-card">
-          <h3>Economic value</h3>
-          <p class="summary-card__primary">
-            NMB: <span id="nmb-span">–</span>
-          </p>
-          <p class="summary-card__secondary">
-            Costs: <span id="total-cost-span">–</span> · BCR:
-            <span id="bcr-span">–</span>
-          </p>
-        </article>
-      </section>
-
-      <section class="panel panel--wide">
-        <h2 class="panel__title">Uptake and behavioural segmentation</h2>
-
-        <div class="panel__content panel__content--split">
-          <div class="panel__block">
-            <h3>Predicted uptake</h3>
-            <canvas id="uptake-chart" height="180"></canvas>
-          </div>
-
-          <div class="panel__block">
-            <h3>Latent classes</h3>
-            <p>
-              Mandate-supporters: <strong id="share-supporters-span">–</strong> of
-              respondents (uptake: <span id="uptake-supporters-span">–</span>).
-              Mandate-resisters: <strong id="share-resisters-span">–</strong> of
-              respondents (uptake: <span id="uptake-resisters-span">–</span>).
-            </p>
-            <canvas id="lc-chart" height="180"></canvas>
-          </div>
-        </div>
-      </section>
-
-      <section class="panel panel--wide">
-        <h2 class="panel__title">Benefits and costs</h2>
-        <div class="panel__content panel__content--split">
-          <div class="panel__block">
-            <h3>Benefit metrics</h3>
-            <ul class="metric-list">
-              <li>
-                Additional vaccinated:
-                <strong><span id="deltaV-span">–</span></strong>
-              </li>
-              <li>
-                Hospitalisations averted:
-                <strong><span id="hosp-averted-span">–</span></strong>
-              </li>
-              <li>
-                Monetised benefits:
-                <strong><span id="monetised-benefits-span">–</span></strong>
-              </li>
-            </ul>
-            <canvas id="benefit-chart" height="200"></canvas>
-          </div>
-          <div class="panel__block">
-            <h3>Cost breakdown</h3>
-            <ul class="metric-list">
-              <li>Public-sector programme: <span id="cost-program-span">–</span></li>
-              <li>Employer-side: <span id="cost-employer-span">–</span></li>
-              <li>Vaccination costs: <span id="cost-vacc-span">–</span></li>
-              <li>Social/political costs: <span id="cost-social-span">–</span></li>
-            </ul>
-            <canvas id="cost-chart" height="200"></canvas>
-          </div>
-        </div>
-      </section>
-
-      <section class="panel panel--wide">
-        <h2 class="panel__title">Cost-effectiveness and uncertainty</h2>
-        <div class="panel__content panel__content--split">
-          <div class="panel__block">
-            <h3>CEA metrics</h3>
-            <ul class="metric-list">
-              <li>
-                Cost per QALY gained:
-                <strong><span id="icer-qaly-span">–</span></strong>
-              </li>
-              <li>
-                Cost per additional vaccinated:
-                <strong><span id="icer-vacc-span">–</span></strong>
-              </li>
-              <li>
-                Payback time:
-                <strong><span id="payback-span">–</span></strong>
-              </li>
-            </ul>
-            <canvas id="tornado-chart" height="200"></canvas>
-          </div>
-          <div class="panel__block">
-            <h3>CEAC (probabilistic sensitivity)</h3>
-            <canvas id="ceac-chart" height="220"></canvas>
-          </div>
-        </div>
-      </section>
-
-      <section class="panel panel--wide">
-        <h2 class="panel__title">Equity and distribution</h2>
-        <div class="panel__content panel__content--split">
-          <div class="panel__block">
-            <h3>Equity metrics</h3>
-            <ul class="metric-list">
-              <li>
-                Concentration index:
-                <strong><span id="conc-index-span">–</span></strong>
-              </li>
-              <li>
-                Equity-adjusted NMB:
-                <strong><span id="equity-nmb-span">–</span></strong>
-              </li>
-            </ul>
-          </div>
-          <div class="panel__block">
-            <h3>QALY gains by SES</h3>
-            <canvas id="equity-chart" height="200"></canvas>
-          </div>
-        </div>
-      </section>
-
-      <section class="panel panel--wide panel--muted">
-        <h2 class="panel__title">Methods (overview)</h2>
-        <div class="panel__content">
-          <p>
-            Uptake estimates are derived from country- and scenario-specific discrete
-            choice experiment (DCE) models. Mixed logit models capture continuous
-            preference heterogeneity, and two-class latent class models distinguish
-            mandate-supporters from mandate-resisters. Uptake predictions for a given
-            mandate design combine both model families.
-          </p>
-          <p>
-            Health outcomes (cases, hospitalisations, deaths, QALYs, DALYs) are derived
-            from user-specified assumptions about vaccine effectiveness, infection
-            attack rates, and outcome risks. Economic outcomes combine programme,
-            employer, vaccination, and social/political costs with avoided medical
-            costs, productivity losses, and mortality risk reductions using VSL and
-            WTP-per-QALY parameters.
-          </p>
-          <p>
-            Deterministic and probabilistic sensitivity analyses vary key parameters,
-            generate cost-effectiveness acceptability curves (CEACs), and construct
-            tornado diagrams to visualise the main drivers of net monetary benefit.
-            Equity metrics distribute QALY gains across SES groups, compute a simple
-            concentration index, and apply equity weights to obtain equity-adjusted
-            net monetary benefit.
-          </p>
-          <p class="panel__note">
-            This is a research prototype. Parameter values and model structure should
-            be adapted to match the final epidemiological and costing specifications.
-          </p>
-        </div>
-      </section>
-    </section>
-  </main>
-
-  <footer class="app-footer">
-    <span>Vaccine Mandate DCE Decision Aid – prototype interface</span>
-    <span>Design ready for integration with back-end / API services.</span>
-  </footer>
-
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script src="script.js"></script>
 </body>
 </html>
