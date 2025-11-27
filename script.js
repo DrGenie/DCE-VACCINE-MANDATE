@@ -1090,3 +1090,50 @@ document.addEventListener("DOMContentLoaded", () => {
   initCharts();
   renderAll();
 });
+// ---------------------------------------------------------------------------
+// TAB NAVIGATION: wire top nav buttons to main view sections
+// ---------------------------------------------------------------------------
+
+function initTabs() {
+  const navItems = document.querySelectorAll(".nav-item[data-view]");
+  const sections = document.querySelectorAll(".view-section");
+
+  if (!navItems.length || !sections.length) return;
+
+  const activateView = (view) => {
+    // Highlight active tab
+    navItems.forEach((btn) => {
+      btn.classList.toggle("active", btn.dataset.view === view);
+    });
+
+    // Show / hide sections
+    sections.forEach((sec) => {
+      const shouldShow = sec.id === `view-${view}`;
+      sec.classList.toggle("active", shouldShow);
+    });
+  };
+
+  // Initial view: existing active tab or first tab
+  const activeNav = document.querySelector(".nav-item.active[data-view]");
+  const initialView =
+    (activeNav && activeNav.dataset.view) ||
+    (navItems[0] && navItems[0].dataset.view);
+
+  if (initialView) {
+    activateView(initialView);
+  }
+
+  // Click handlers
+  navItems.forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const view = btn.dataset.view;
+      if (view) activateView(view);
+    });
+  });
+}
+
+// Ensure DOM is ready before wiring up tabs
+document.addEventListener("DOMContentLoaded", () => {
+  initTabs();
+});
+
