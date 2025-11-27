@@ -1086,13 +1086,14 @@ function initControls() {
 
 document.addEventListener("DOMContentLoaded", () => {
   initNavigation();
-  initControls();
-  initCharts();
-  renderAll();
+  // keep these only if they are defined later in the file:
+  if (typeof initControls === "function") initControls();
+  if (typeof initCharts === "function") initCharts();
+  if (typeof renderAll === "function") renderAll();
 });
 
 /* -----------------------------------------------------
-   NAVIGATION (uses data-target + section IDs)
+   NAVIGATION (tabs: sidebar -> main views)
 ----------------------------------------------------- */
 
 function initNavigation() {
@@ -1102,18 +1103,18 @@ function initNavigation() {
   if (!navItems.length || !sections.length) return;
 
   const activateView = (targetId) => {
-    // Highlight active tab
+    // highlight active tab
     navItems.forEach((btn) => {
       btn.classList.toggle("active", btn.dataset.target === targetId);
     });
 
-    // Show / hide sections
+    // show/hide sections
     sections.forEach((sec) => {
       sec.classList.toggle("active", sec.id === targetId);
     });
   };
 
-  // Initial view: existing active tab or first tab
+  // initial view: current active tab or first tab
   const activeNav = document.querySelector(".nav-item.active[data-target]");
   const initialTarget =
     (activeNav && activeNav.dataset.target) ||
@@ -1123,7 +1124,7 @@ function initNavigation() {
     activateView(initialTarget);
   }
 
-  // Click handlers
+  // click handlers
   navItems.forEach((btn) => {
     btn.addEventListener("click", (e) => {
       e.preventDefault();
