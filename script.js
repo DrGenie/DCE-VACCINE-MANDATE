@@ -1092,44 +1092,43 @@ document.addEventListener("DOMContentLoaded", () => {
 });
 
 /* -----------------------------------------------------
-   NAVIGATION
+   NAVIGATION (uses data-target + section IDs)
 ----------------------------------------------------- */
 
 function initNavigation() {
-  const navItems = document.querySelectorAll(".nav-item[data-view]");
+  const navItems = document.querySelectorAll(".nav-item[data-target]");
   const sections = document.querySelectorAll(".view-section");
 
   if (!navItems.length || !sections.length) return;
 
-  const activateView = (view) => {
+  const activateView = (targetId) => {
     // Highlight active tab
     navItems.forEach((btn) => {
-      btn.classList.toggle("active", btn.dataset.view === view);
+      btn.classList.toggle("active", btn.dataset.target === targetId);
     });
 
     // Show / hide sections
     sections.forEach((sec) => {
-      const shouldShow = sec.id === `view-${view}`;
-      sec.classList.toggle("active", shouldShow);
+      sec.classList.toggle("active", sec.id === targetId);
     });
   };
 
   // Initial view: existing active tab or first tab
-  const activeNav = document.querySelector(".nav-item.active[data-view]");
-  const initialView =
-    (activeNav && activeNav.dataset.view) ||
-    (navItems[0] && navItems[0].dataset.view);
+  const activeNav = document.querySelector(".nav-item.active[data-target]");
+  const initialTarget =
+    (activeNav && activeNav.dataset.target) ||
+    (navItems[0] && navItems[0].dataset.target);
 
-  if (initialView) {
-    activateView(initialView);
+  if (initialTarget) {
+    activateView(initialTarget);
   }
 
   // Click handlers
   navItems.forEach((btn) => {
     btn.addEventListener("click", (e) => {
       e.preventDefault();
-      const view = btn.dataset.view;
-      if (view) activateView(view);
+      const targetId = btn.dataset.target;
+      if (targetId) activateView(targetId);
     });
   });
 }
