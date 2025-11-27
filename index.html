@@ -1,0 +1,780 @@
+<!-- index.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Vaccine Mandate Policy Decision-Aid Tool</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+  <!-- Typography -->
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+
+  <!-- Styles -->
+  <link rel="stylesheet" href="styles.css" />
+
+  <!-- Charts & PDF -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+</head>
+<body>
+  <div class="app-shell">
+    <!-- HEADER -->
+    <header class="app-header">
+      <div class="app-header__left">
+        <div class="app-logo-circle">VM</div>
+        <div class="app-title-group">
+          <h1 class="app-title">Vaccine Mandate Policy Decision-Aid</h1>
+          <p class="app-subtitle">Multi-country DCE-informed cost–effectiveness and equity dashboard</p>
+        </div>
+      </div>
+      <div class="app-header__right">
+        <div class="field inline-field">
+          <label for="country-select">Country</label>
+          <select id="country-select">
+            <option value="Australia">Australia</option>
+            <option value="France">France</option>
+            <option value="Italy">Italy</option>
+          </select>
+        </div>
+        <div class="field inline-field">
+          <label for="context-select">Outbreak context</label>
+          <select id="context-select">
+            <option value="mild">Mild outbreak</option>
+            <option value="severe">Severe outbreak</option>
+          </select>
+        </div>
+        <div class="field inline-field">
+          <label for="benefit-metric-select">Benefit lens</label>
+          <select id="benefit-metric-select">
+            <option value="A">A – Additional vaccinated</option>
+            <option value="B">B – Cases averted</option>
+            <option value="C">C – Hosp/ICU/deaths averted</option>
+            <option value="D">D – QALYs gained</option>
+            <option value="E">E – DALYs averted</option>
+            <option value="F">F – Monetised benefits</option>
+            <option value="G">G – Equity-weighted NMB</option>
+          </select>
+        </div>
+      </div>
+    </header>
+
+    <!-- MAIN LAYOUT -->
+    <main class="app-main">
+      <div class="layout-grid">
+        <!-- LEFT COLUMN: CONFIG + INPUTS -->
+        <section class="panel panel--controls">
+          <div class="panel__header">
+            <h2>Mandate configuration & inputs</h2>
+            <p>Configure the mandate design, epidemiological context, and costing assumptions.</p>
+          </div>
+
+          <!-- Mandate configuration -->
+          <div class="panel-section">
+            <div class="panel-section__header">
+              <h3>Mandate design</h3>
+            </div>
+            <div class="panel-section__body">
+              <div class="field">
+                <label for="mandate-type-select">Mandate type</label>
+                <select id="mandate-type-select">
+                  <option value="none">No mandate / voluntary vaccination</option>
+                  <option value="soft">Soft mandate (e.g., green pass)</option>
+                  <option value="sectoral">Sectoral mandate (e.g., health workers)</option>
+                  <option value="broad">Broad population mandate</option>
+                </select>
+              </div>
+
+              <div class="field">
+                <label for="target-group-select">Target group</label>
+                <select id="target-group-select">
+                  <option value="all_adults">All adults</option>
+                  <option value="older_adults">Older adults (60+)</option>
+                  <option value="health_workers">Health and social care workers</option>
+                  <option value="essential_workers">Essential / critical workers</option>
+                </select>
+              </div>
+
+              <div class="field-group">
+                <div class="field">
+                  <label for="enforcement-intensity-range">
+                    Enforcement intensity
+                    <span class="field-hint">(inspections, penalties)</span>
+                  </label>
+                  <input type="range" id="enforcement-intensity-range" min="0" max="10" step="1" value="5" />
+                  <div class="field-range-labels">
+                    <span>Low</span><span>High</span>
+                  </div>
+                </div>
+
+                <div class="field">
+                  <label for="incentives-range">
+                    Support & incentives
+                    <span class="field-hint">(facilitation, compensation)</span>
+                  </label>
+                  <input type="range" id="incentives-range" min="0" max="10" step="1" value="5" />
+                  <div class="field-range-labels">
+                    <span>Minimal</span><span>Generous</span>
+                  </div>
+                </div>
+              </div>
+
+              <div class="field-group">
+                <div class="field">
+                  <label for="exemptions-select">Exemption policy</label>
+                  <select id="exemptions-select">
+                    <option value="lenient">Lenient (broad exemptions)</option>
+                    <option value="balanced">Balanced</option>
+                    <option value="strict">Strict (few exemptions)</option>
+                  </select>
+                </div>
+                <div class="field">
+                  <label for="testing-option-select">Testing alternative</label>
+                  <select id="testing-option-select">
+                    <option value="none">No testing alternative</option>
+                    <option value="weekly">Weekly testing allowed</option>
+                    <option value="frequent">Frequent testing allowed</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Epidemiological & population inputs -->
+          <div class="panel-section">
+            <div class="panel-section__header">
+              <h3>Epidemiology & population</h3>
+            </div>
+            <div class="panel-section__body">
+              <div class="field-group">
+                <div class="field">
+                  <label for="population-input">Population at risk (N)</label>
+                  <input type="number" id="population-input" min="0" step="1000" value="1000000" />
+                </div>
+                <div class="field">
+                  <label for="baseline-uptake-input">Baseline uptake without mandate (p₀)</label>
+                  <input type="number" id="baseline-uptake-input" min="0" max="1" step="0.01" value="0.7" />
+                </div>
+              </div>
+
+              <div class="field-group">
+                <div class="field">
+                  <label for="attack-rate-input">Attack rate without mandate</label>
+                  <input type="number" id="attack-rate-input" min="0" max="1" step="0.01" value="0.25" />
+                </div>
+                <div class="field">
+                  <label for="r0-input">R₀ (transmission)</label>
+                  <input type="number" id="r0-input" min="0" step="0.1" value="4" />
+                </div>
+              </div>
+
+              <div class="field-group">
+                <div class="field">
+                  <label for="ve-input">Vaccine effectiveness (VE)</label>
+                  <input type="number" id="ve-input" min="0" max="1" step="0.01" value="0.85" />
+                </div>
+                <div class="field">
+                  <label for="ifr-input">Infection fatality risk (IFR)</label>
+                  <input type="number" id="ifr-input" min="0" max="0.1" step="0.0001" value="0.005" />
+                </div>
+              </div>
+
+              <div class="field-group">
+                <div class="field">
+                  <label for="hosp-risk-input">Hospitalisation risk per infection</label>
+                  <input type="number" id="hosp-risk-input" min="0" max="0.5" step="0.001" value="0.05" />
+                </div>
+                <div class="field">
+                  <label for="icu-risk-input">ICU risk per infection</label>
+                  <input type="number" id="icu-risk-input" min="0" max="0.5" step="0.001" value="0.01" />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Economic parameters -->
+          <div class="panel-section">
+            <div class="panel-section__header">
+              <h3>Economic parameters</h3>
+            </div>
+            <div class="panel-section__body">
+              <div class="field-group">
+                <div class="field">
+                  <label for="wtp-input">WTP per QALY (λ)</label>
+                  <input type="number" id="wtp-input" min="0" step="1000" value="50000" />
+                </div>
+                <div class="field">
+                  <label for="discount-rate-input">Discount rate</label>
+                  <input type="number" id="discount-rate-input" min="0" max="0.1" step="0.005" value="0.03" />
+                </div>
+              </div>
+
+              <div class="field-group">
+                <div class="field">
+                  <label for="vsl-input">Value of statistical life (VSL)</label>
+                  <input type="number" id="vsl-input" min="0" step="10000" value="7000000" />
+                </div>
+                <div class="field">
+                  <label for="vsly-input">Value of statistical life-year (VSLY)</label>
+                  <input type="number" id="vsly-input" min="0" step="1000" value="250000" />
+                </div>
+              </div>
+
+              <div class="field-group">
+                <div class="field">
+                  <label for="qaly-loss-death-input">QALY loss per COVID death</label>
+                  <input type="number" id="qaly-loss-death-input" min="0" step="0.1" value="8" />
+                </div>
+                <div class="field">
+                  <label for="qaly-loss-case-input">QALY loss per non-fatal case</label>
+                  <input type="number" id="qaly-loss-case-input" min="0" step="0.01" value="0.02" />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Cost catalogue -->
+          <div class="panel-section panel-section--accordion">
+            <div class="panel-section__header">
+              <h3>Cost catalogue</h3>
+              <button class="btn btn--ghost btn--xs" type="button" data-toggle="cost-section">
+                Expand / collapse
+              </button>
+            </div>
+            <div class="panel-section__body" id="cost-section">
+              <p class="panel-note">Enter incremental costs of implementing the mandate (per programme, not per person). Use toggles to include/exclude categories in sensitivity analysis.</p>
+
+              <h4 class="cost-group-title">Public-sector costs</h4>
+              <div class="cost-grid">
+                <label class="cost-item">
+                  <input type="checkbox" class="cost-toggle" data-cost-id="policyDrafting" checked />
+                  <span>Policy drafting & design</span>
+                  <input type="number" class="cost-input" data-cost-id="policyDrafting" value="500000" min="0" step="10000" />
+                </label>
+                <label class="cost-item">
+                  <input type="checkbox" class="cost-toggle" data-cost-id="legalPrep" checked />
+                  <span>Legal & regulatory preparation</span>
+                  <input type="number" class="cost-input" data-cost-id="legalPrep" value="300000" min="0" step="10000" />
+                </label>
+                <label class="cost-item">
+                  <input type="checkbox" class="cost-toggle" data-cost-id="communications" checked />
+                  <span>Public communications campaigns</span>
+                  <input type="number" class="cost-input" data-cost-id="communications" value="800000" min="0" step="10000" />
+                </label>
+                <label class="cost-item">
+                  <input type="checkbox" class="cost-toggle" data-cost-id="itSystems" checked />
+                  <span>IT & certificate systems</span>
+                  <input type="number" class="cost-input" data-cost-id="itSystems" value="1200000" min="0" step="10000" />
+                </label>
+                <label class="cost-item">
+                  <input type="checkbox" class="cost-toggle" data-cost-id="exemptionProcessing" checked />
+                  <span>Exemption processing</span>
+                  <input type="number" class="cost-input" data-cost-id="exemptionProcessing" value="400000" min="0" step="10000" />
+                </label>
+                <label class="cost-item">
+                  <input type="checkbox" class="cost-toggle" data-cost-id="enforcement" checked />
+                  <span>Enforcement & inspections</span>
+                  <input type="number" class="cost-input" data-cost-id="enforcement" value="900000" min="0" step="10000" />
+                </label>
+                <label class="cost-item">
+                  <input type="checkbox" class="cost-toggle" data-cost-id="extraCapacity" checked />
+                  <span>Additional vaccination capacity</span>
+                  <input type="number" class="cost-input" data-cost-id="extraCapacity" value="1500000" min="0" step="10000" />
+                </label>
+              </div>
+
+              <h4 class="cost-group-title">Employer-side costs</h4>
+              <div class="cost-grid">
+                <label class="cost-item">
+                  <input type="checkbox" class="cost-toggle" data-cost-id="managementTime" checked />
+                  <span>Management / HR time</span>
+                  <input type="number" class="cost-input" data-cost-id="managementTime" value="600000" min="0" step="10000" />
+                </label>
+                <label class="cost-item">
+                  <input type="checkbox" class="cost-toggle" data-cost-id="ptoVaccination" checked />
+                  <span>Paid time off – vaccination</span>
+                  <input type="number" class="cost-input" data-cost-id="ptoVaccination" value="500000" min="0" step="10000" />
+                </label>
+                <label class="cost-item">
+                  <input type="checkbox" class="cost-toggle" data-cost-id="ptoSideEffects" checked />
+                  <span>Paid time off – side-effect recovery</span>
+                  <input type="number" class="cost-input" data-cost-id="ptoSideEffects" value="400000" min="0" step="10000" />
+                </label>
+                <label class="cost-item">
+                  <input type="checkbox" class="cost-toggle" data-cost-id="recordKeeping" checked />
+                  <span>Record keeping & reporting</span>
+                  <input type="number" class="cost-input" data-cost-id="recordKeeping" value="250000" min="0" step="10000" />
+                </label>
+                <label class="cost-item">
+                  <input type="checkbox" class="cost-toggle" data-cost-id="testingCosts" checked />
+                  <span>Testing costs (if allowed)</span>
+                  <input type="number" class="cost-input" data-cost-id="testingCosts" value="700000" min="0" step="10000" />
+                </label>
+                <label class="cost-item">
+                  <input type="checkbox" class="cost-toggle" data-cost-id="staffingDisruptions" checked />
+                  <span>Staffing disruptions & attrition</span>
+                  <input type="number" class="cost-input" data-cost-id="staffingDisruptions" value="800000" min="0" step="10000" />
+                </label>
+              </div>
+
+              <h4 class="cost-group-title">Vaccination programme costs</h4>
+              <div class="cost-grid">
+                <label class="cost-item">
+                  <input type="checkbox" class="cost-toggle" data-cost-id="vaccineProcurement" checked />
+                  <span>Vaccine procurement</span>
+                  <input type="number" class="cost-input" data-cost-id="vaccineProcurement" value="2000000" min="0" step="10000" />
+                </label>
+                <label class="cost-item">
+                  <input type="checkbox" class="cost-toggle" data-cost-id="coldChain" checked />
+                  <span>Cold chain & storage</span>
+                  <input type="number" class="cost-input" data-cost-id="coldChain" value="500000" min="0" step="10000" />
+                </label>
+                <label class="cost-item">
+                  <input type="checkbox" class="cost-toggle" data-cost-id="logistics" checked />
+                  <span>Logistics & transport</span>
+                  <input type="number" class="cost-input" data-cost-id="logistics" value="600000" min="0" step="10000" />
+                </label>
+                <label class="cost-item">
+                  <input type="checkbox" class="cost-toggle" data-cost-id="vaccinators" checked />
+                  <span>Vaccinators’ salaries</span>
+                  <input type="number" class="cost-input" data-cost-id="vaccinators" value="800000" min="0" step="10000" />
+                </label>
+                <label class="cost-item">
+                  <input type="checkbox" class="cost-toggle" data-cost-id="trainingSupervision" checked />
+                  <span>Training & supervision</span>
+                  <input type="number" class="cost-input" data-cost-id="trainingSupervision" value="300000" min="0" step="10000" />
+                </label>
+                <label class="cost-item">
+                  <input type="checkbox" class="cost-toggle" data-cost-id="capitalEquipment" checked />
+                  <span>Capital equipment (annualised)</span>
+                  <input type="number" class="cost-input" data-cost-id="capitalEquipment" value="400000" min="0" step="10000" />
+                </label>
+                <label class="cost-item">
+                  <input type="checkbox" class="cost-toggle" data-cost-id="utilitiesOverhead" checked />
+                  <span>Utilities & overhead</span>
+                  <input type="number" class="cost-input" data-cost-id="utilitiesOverhead" value="350000" min="0" step="10000" />
+                </label>
+                <label class="cost-item">
+                  <input type="checkbox" class="cost-toggle" data-cost-id="wasteDisposal" checked />
+                  <span>Waste & safety disposal</span>
+                  <input type="number" class="cost-input" data-cost-id="wasteDisposal" value="150000" min="0" step="10000" />
+                </label>
+              </div>
+
+              <h4 class="cost-group-title">Social / political costs</h4>
+              <p class="panel-note">These can be included or excluded in sensitivity analysis; they are often controversial and context-specific.</p>
+              <div class="cost-grid">
+                <label class="cost-item">
+                  <input type="checkbox" class="cost-toggle" data-cost-id="trustErosion" />
+                  <span>Trust erosion</span>
+                  <input type="number" class="cost-input" data-cost-id="trustErosion" value="0" min="0" step="10000" />
+                </label>
+                <label class="cost-item">
+                  <input type="checkbox" class="cost-toggle" data-cost-id="polarisation" />
+                  <span>Social polarisation</span>
+                  <input type="number" class="cost-input" data-cost-id="polarisation" value="0" min="0" step="10000" />
+                </label>
+                <label class="cost-item">
+                  <input type="checkbox" class="cost-toggle" data-cost-id="protests" />
+                  <span>Protests & policing</span>
+                  <input type="number" class="cost-input" data-cost-id="protests" value="0" min="0" step="10000" />
+                </label>
+                <label class="cost-item">
+                  <input type="checkbox" class="cost-toggle" data-cost-id="unmetCare" />
+                  <span>Unmet care due to workforce attrition</span>
+                  <input type="number" class="cost-input" data-cost-id="unmetCare" value="0" min="0" step="10000" />
+                </label>
+              </div>
+            </div>
+          </div>
+
+          <!-- Sensitivity controls -->
+          <div class="panel-section">
+            <div class="panel-section__header">
+              <h3>Sensitivity & robustness controls</h3>
+            </div>
+            <div class="panel-section__body">
+              <div class="field-group">
+                <div class="field">
+                  <label for="psa-runs-input">Monte Carlo runs (PSA)</label>
+                  <input type="number" id="psa-runs-input" min="100" max="10000" step="100" value="1000" />
+                </div>
+                <div class="field">
+                  <label for="psa-variation-input">Parameter variation (±%)</label>
+                  <input type="number" id="psa-variation-input" min="1" max="100" step="1" value="20" />
+                </div>
+              </div>
+              <div class="field-group">
+                <button id="run-psa-btn" type="button" class="btn btn--primary btn--full">
+                  Run probabilistic sensitivity analysis
+                </button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- RIGHT COLUMN: RESULTS + CHARTS -->
+        <section class="panel panel--results">
+          <div class="panel__header panel__header--results">
+            <h2>Uptake, health impact & economic evaluation</h2>
+            <div class="results-actions">
+              <button id="export-policy-brief-btn" type="button" class="btn btn--secondary">
+                Export policy brief (PDF)
+              </button>
+              <button id="toggle-methods-btn" type="button" class="btn btn--ghost">
+                Methods & assumptions
+              </button>
+            </div>
+          </div>
+
+          <!-- Key KPI strip -->
+          <div class="kpi-grid">
+            <div class="kpi-card">
+              <div class="kpi-label">Predicted uptake with mandate (pₘ)</div>
+              <div class="kpi-value" id="kpi-uptake-pm">–</div>
+              <div class="kpi-sub" id="kpi-uptake-delta">Δ uptake vs baseline: –</div>
+            </div>
+            <div class="kpi-card">
+              <div class="kpi-label">Additional vaccinated (ΔV)</div>
+              <div class="kpi-value" id="kpi-additional-vaccinated">–</div>
+              <div class="kpi-sub">Benefit metric A</div>
+            </div>
+            <div class="kpi-card">
+              <div class="kpi-label">Cases averted</div>
+              <div class="kpi-value" id="kpi-cases-averted">–</div>
+              <div class="kpi-sub">Benefit metric B</div>
+            </div>
+            <div class="kpi-card">
+              <div class="kpi-label">Incremental QALYs gained</div>
+              <div class="kpi-value" id="kpi-qalys-gained">–</div>
+              <div class="kpi-sub">Benefit metric D</div>
+            </div>
+            <div class="kpi-card">
+              <div class="kpi-label">Total incremental cost</div>
+              <div class="kpi-value" id="kpi-total-cost">–</div>
+              <div class="kpi-sub">Programme & indirect costs</div>
+            </div>
+            <div class="kpi-card">
+              <div class="kpi-label">Net monetary benefit (NMB)</div>
+              <div class="kpi-value" id="kpi-nmb">–</div>
+              <div class="kpi-sub" id="kpi-nmb-label">vs selected comparator</div>
+            </div>
+          </div>
+
+          <!-- Tabs -->
+          <div class="tabs">
+            <button class="tab active" data-tab="tab-uptake">DCE uptake & segmentation</button>
+            <button class="tab" data-tab="tab-benefits">Health outcomes & benefits</button>
+            <button class="tab" data-tab="tab-economic">Costs, CBA & CEA</button>
+            <button class="tab" data-tab="tab-equity">Equity & distribution</button>
+            <button class="tab" data-tab="tab-sensitivity">Sensitivity & CEAC</button>
+            <button class="tab" data-tab="tab-descriptive">Descriptive statistics</button>
+          </div>
+
+          <!-- TAB CONTENT: UPTAKE -->
+          <div class="tab-content active" id="tab-uptake">
+            <div class="two-column">
+              <div>
+                <h3>DCE-informed uptake</h3>
+                <p class="panel-note">
+                  Uptake combines mixed logit heterogeneity and latent class segments (e.g., mandate supporters vs mandate resisters). Replace placeholder DCE parameters in <code>script.js</code> with country-specific estimates.
+                </p>
+                <table class="table table--compact">
+                  <thead>
+                    <tr>
+                      <th>Segment</th>
+                      <th>Class share</th>
+                      <th>Uptake (pₘ)</th>
+                    </tr>
+                  </thead>
+                  <tbody id="lc-uptake-table-body">
+                    <!-- populated by JS -->
+                  </tbody>
+                </table>
+              </div>
+              <div>
+                <h3>Uptake by country & context</h3>
+                <canvas id="uptake-chart"></canvas>
+              </div>
+            </div>
+          </div>
+
+          <!-- TAB CONTENT: BENEFITS -->
+          <div class="tab-content" id="tab-benefits">
+            <div class="two-column">
+              <div>
+                <h3>Health outcomes averted</h3>
+                <table class="table table--compact">
+                  <tbody>
+                    <tr>
+                      <th>Cases averted</th>
+                      <td id="tbl-cases-averted">–</td>
+                    </tr>
+                    <tr>
+                      <th>Hospitalisations averted</th>
+                      <td id="tbl-hosp-averted">–</td>
+                    </tr>
+                    <tr>
+                      <th>ICU admissions averted</th>
+                      <td id="tbl-icu-averted">–</td>
+                    </tr>
+                    <tr>
+                      <th>Deaths averted</th>
+                      <td id="tbl-deaths-averted">–</td>
+                    </tr>
+                    <tr>
+                      <th>QALYs gained</th>
+                      <td id="tbl-qalys-gained">–</td>
+                    </tr>
+                    <tr>
+                      <th>DALYs averted</th>
+                      <td id="tbl-dalys-averted">–</td>
+                    </tr>
+                    <tr>
+                      <th>Monetised benefits</th>
+                      <td id="tbl-monetised-benefits">–</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+              <div>
+                <h3>Benefits across metrics</h3>
+                <canvas id="benefit-chart"></canvas>
+              </div>
+            </div>
+          </div>
+
+          <!-- TAB CONTENT: ECONOMIC -->
+          <div class="tab-content" id="tab-economic">
+            <div class="two-column">
+              <div>
+                <h3>Cost summary</h3>
+                <table class="table table--compact">
+                  <tbody>
+                    <tr>
+                      <th>Public-sector costs</th>
+                      <td id="tbl-public-costs">–</td>
+                    </tr>
+                    <tr>
+                      <th>Employer-side costs</th>
+                      <td id="tbl-employer-costs">–</td>
+                    </tr>
+                    <tr>
+                      <th>Vaccination programme costs</th>
+                      <td id="tbl-programme-costs">–</td>
+                    </tr>
+                    <tr>
+                      <th>Social / political costs</th>
+                      <td id="tbl-social-costs">–</td>
+                    </tr>
+                    <tr>
+                      <th>Total incremental cost</th>
+                      <td id="tbl-total-costs">–</td>
+                    </tr>
+                  </tbody>
+                </table>
+
+                <h3>Key cost–effectiveness ratios</h3>
+                <table class="table table--compact">
+                  <tbody>
+                    <tr>
+                      <th>Cost per additional vaccinated</th>
+                      <td id="tbl-cer-vaccinated">–</td>
+                    </tr>
+                    <tr>
+                      <th>Cost per case averted</th>
+                      <td id="tbl-cer-case">–</td>
+                    </tr>
+                    <tr>
+                      <th>Cost per death averted</th>
+                      <td id="tbl-cer-death">–</td>
+                    </tr>
+                    <tr>
+                      <th>Cost per QALY gained</th>
+                      <td id="tbl-cer-qaly">–</td>
+                    </tr>
+                    <tr>
+                      <th>Cost per DALY averted</th>
+                      <td id="tbl-cer-daly">–</td>
+                    </tr>
+                    <tr>
+                      <th>Benefit–cost ratio</th>
+                      <td id="tbl-bcr">–</td>
+                    </tr>
+                    <tr>
+                      <th>Payback time (years)</th>
+                      <td id="tbl-payback">–</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+              <div>
+                <h3>Costs vs benefits</h3>
+                <canvas id="economic-chart"></canvas>
+              </div>
+            </div>
+          </div>
+
+          <!-- TAB CONTENT: EQUITY -->
+          <div class="tab-content" id="tab-equity">
+            <div class="two-column">
+              <div>
+                <h3>Equity-weighted outcomes</h3>
+                <table class="table table--compact">
+                  <thead>
+                    <tr>
+                      <th>Subgroup</th>
+                      <th>QALYs gained</th>
+                      <th>Equity weight</th>
+                      <th>Weighted QALYs</th>
+                    </tr>
+                  </thead>
+                  <tbody id="equity-table-body">
+                    <!-- populated by JS -->
+                  </tbody>
+                </table>
+                <p class="panel-note">
+                  Equity weights and concentration indices are parameterised in <code>script.js</code>. Replace placeholders with country- and SES-specific estimates.
+                </p>
+              </div>
+              <div>
+                <h3>Distribution of benefits</h3>
+                <canvas id="equity-chart"></canvas>
+              </div>
+            </div>
+          </div>
+
+          <!-- TAB CONTENT: SENSITIVITY -->
+          <div class="tab-content" id="tab-sensitivity">
+            <div class="two-column">
+              <div>
+                <h3>Tornado plot (deterministic sensitivity)</h3>
+                <p class="panel-note">
+                  The tornado plot ranks parameters by impact on cost per QALY or NMB when moved ± the selected variation.
+                </p>
+                <canvas id="tornado-chart"></canvas>
+              </div>
+              <div>
+                <h3>Cost–effectiveness acceptability curve (CEAC)</h3>
+                <p class="panel-note">
+                  CEAC summarises the probability that the mandate is cost-effective across willingness-to-pay thresholds.
+                </p>
+                <canvas id="ceac-chart"></canvas>
+                <p class="panel-status" id="psa-status">PSA not yet run.</p>
+              </div>
+            </div>
+          </div>
+
+          <!-- TAB CONTENT: DESCRIPTIVE STATS -->
+          <div class="tab-content" id="tab-descriptive">
+            <div class="two-column">
+              <div>
+                <h3>Sample characteristics</h3>
+                <p class="panel-note">
+                  Descriptive statistics are placeholders. Replace with country- and class-specific descriptive outputs.
+                </p>
+                <div class="field">
+                  <label for="desc-scope-select">View by</label>
+                  <select id="desc-scope-select">
+                    <option value="overall">Country overall</option>
+                    <option value="context">By outbreak context</option>
+                    <option value="class">By latent class</option>
+                  </select>
+                </div>
+                <table class="table table--compact">
+                  <thead>
+                    <tr>
+                      <th>Variable</th>
+                      <th>Value</th>
+                    </tr>
+                  </thead>
+                  <tbody id="descriptive-table-body">
+                    <!-- populated by JS -->
+                  </tbody>
+                </table>
+              </div>
+              <div>
+                <h3>Notes on data integration</h3>
+                <ul class="bullet-list">
+                  <li>Descriptive statistics can be exported from the DCE estimation code (e.g., Stata or R) as JSON or directly pasted into <code>script.js</code>.</li>
+                  <li>Latent-class segments should align with the uptake engine (e.g., mandate supporters vs resisters).</li>
+                  <li>Ensure that any subgroup splits (e.g., age, SES, political attitudes) used in equity analysis are consistent with these descriptive statistics.</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </section>
+      </div>
+    </main>
+
+    <!-- METHODS DRAWER -->
+    <aside class="methods-drawer" id="methods-drawer">
+      <div class="methods-drawer__content">
+        <div class="methods-drawer__header">
+          <h2>Methods & modelling assumptions</h2>
+          <button id="close-methods-btn" type="button" class="btn btn--icon-only" aria-label="Close methods">
+            ✕
+          </button>
+        </div>
+        <div class="methods-drawer__body">
+          <section class="methods-section">
+            <h3>DCE-to-uptake mapping</h3>
+            <p>
+              The tool is designed to incorporate mixed logit (MXL) and latent class (LC) discrete choice experiment results for vaccine mandate policies in Australia, France, and Italy. For each country and outbreak context, mandate attributes (e.g., mandate scope, enforcement, exemptions, incentives) are mapped into utility using estimated coefficients. Individual-level utility is translated into predicted choice probabilities using a logit kernel, and latent class membership probabilities are used to aggregate across mandate-supporter and mandate-resister segments.
+            </p>
+          </section>
+
+          <section class="methods-section">
+            <h3>Epidemiological models</h3>
+            <p>
+              Benefit metric B (cases averted) can be implemented using alternative models. A static attack-rate model links vaccination coverage, vaccine effectiveness, and an assumed attack rate to estimate cases. A more detailed compartmental model (e.g., SEIR variants) can be incorporated for dynamic transmission and timing effects. A long-COVID extension can be integrated by applying separate morbidity and duration parameters for long-term symptoms conditional on infection and vaccination status.
+            </p>
+          </section>
+
+          <section class="methods-section">
+            <h3>Health outcomes, QALYs and DALYs</h3>
+            <p>
+              Hospitalisations, ICU admissions, and deaths averted are derived from age- or risk-specific probabilities conditional on infection. QALY gains combine avoided mortality (life-years × health-related quality of life) and avoided morbidity from acute COVID-19 and long-COVID. DALYs averted are calculated as years of life lost plus years lived with disability, using disability weights and durations that can be aligned with standard burden-of-disease sources.
+            </p>
+          </section>
+
+          <section class="methods-section">
+            <h3>Costs & economic evaluation</h3>
+            <p>
+              The cost catalogue includes public-sector implementation costs, employer compliance and productivity costs, vaccination programme delivery costs, and optional social and political costs. Cost–benefit analysis compares total monetised benefits with total costs to derive net present value, benefit–cost ratios, and payback times. Cost–effectiveness analysis reports cost per additional vaccinated person, cost per case, hospitalisation, or death averted, and cost per QALY gained or DALY averted, as well as net monetary benefit at user-specified willingness-to-pay thresholds.
+            </p>
+          </section>
+
+          <section class="methods-section">
+            <h3>Equity analysis</h3>
+            <p>
+              Equity-weighted outcomes are computed by splitting QALY gains (or cases/deaths averted) across subgroups (e.g., income, deprivation, age, or risk strata) and applying equity weights or social value weights. Concentration indices can be derived from the distribution of health gains across the socioeconomic distribution, and equity-adjusted net monetary benefit is obtained by applying weights before aggregation.
+            </p>
+          </section>
+
+          <section class="methods-section">
+            <h3>Sensitivity and uncertainty</h3>
+            <p>
+              Deterministic sensitivity analysis varies key parameters (transmission, vaccine effectiveness, costs, discount rates, and social cost assumptions) within user-specified ranges and ranks their impact on cost per QALY or net monetary benefit. Probabilistic sensitivity analysis draws parameters from probability distributions and produces cost–effectiveness acceptability curves summarising the probability that the mandate is cost-effective across willingness-to-pay thresholds.
+            </p>
+          </section>
+
+          <section class="methods-section">
+            <h3>Data and references</h3>
+            <p>
+              All numerical inputs (DCE parameters, epidemiological risks, disability weights, costs, and equity weights) should be populated from published sources and country-specific analyses. Update the placeholder parameter objects in <code>script.js</code> with your empirical estimates, and maintain documentation alongside this tool to ensure transparency and reproducibility of the analyses.
+            </p>
+          </section>
+        </div>
+      </div>
+    </aside>
+
+    <footer class="app-footer">
+      <p>
+        Vaccine Mandate Policy Decision-Aid · Multi-country DCE, epidemiology, and economic evaluation.
+      </p>
+    </footer>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>
