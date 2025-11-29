@@ -1,4 +1,4 @@
-// Simple global state
+// Simple global statee
 const state = {
     config: null,
     countryKey: null,
