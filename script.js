@@ -12,7 +12,7 @@
     let LOCAL_PER_USD_DEFAULT = 1.5;
     let LOCAL_PER_USD = LOCAL_PER_USD_DEFAULT;
 
-    // Mixed logit parameters by country and outbreak scenario (means only)
+    // Mixed logit parameters by country and outbreak scenario (means or average)
     // Keys are "<country>_<scenario>"
     const DCE_PARAMS_MXL = {
         australia_mild: {
