@@ -1,6 +1,11 @@
 // =====================================================
 // MandEval – Vaccine Mandate Policy Decision Aid
 // Front-end logic (script.js)
+// Updates:
+// 1) Align exemption codes with UI (med_relig, med_relig_personal).
+// 2) Map lives-saved slider to nearest design level (10, 25, 35, 40).
+// 3) Use actual cost components in cost breakdown chart.
+// 4) Apply deterministic sensitivity multipliers to programme & employer costs.
 // =====================================================
 
 /* -----------------------------------------------------
@@ -36,9 +41,9 @@ const appState = {
   outbreak: "mild", // mild, severe
   segment: "full", // full, supporters, resisters
   scope: "high_risk", // high_risk, all_public
-  exemptions: "med_only", // med_only, med_religious, med_religious_personal
+  exemptions: "med_only", // med_only, med_relig, med_relig_personal
   coverage: "50", // "50", "70", "90"
-  livesSaved: 25, // per 100,000
+  livesSaved: 25, // per 100,000 (slider value, mapped to design levels internally)
 
   // Epidemiology / economics (stylised defaults)
   population: 1_000_000,
@@ -46,6 +51,9 @@ const appState = {
   valuePerQALY: COUNTRY_META.AUS.valuePerQALY,
   vsl: COUNTRY_META.AUS.vsl
 };
+
+// Lives-saved design levels used in the DCE
+const LIVES_LEVELS = [10, 25, 35, 40];
 
 // Last evaluated results – used for export, charts, sensitivity
 let latestResults = {
@@ -349,6 +357,20 @@ function getSegmentLabel() {
   return "Full sample";
 }
 
+// Map slider value to nearest DCE lives-saved design level
+function mapLivesToDesignLevel(raw) {
+  let closest = LIVES_LEVELS[0];
+  let minDiff = Math.abs(raw - closest);
+  for (const level of LIVES_LEVELS) {
+    const d = Math.abs(raw - level);
+    if (d < minDiff) {
+      minDiff = d;
+      closest = level;
+    }
+  }
+  return closest;
+}
+
 /* -----------------------------------------------------
    MAP ATTRIBUTES -> UTILITY TERMS
 ----------------------------------------------------- */
@@ -384,9 +406,9 @@ function mapAttributesToUtilityTerms(modelParams) {
   }
 
   // Exemptions: map UI codes -> LC/MXL effects
-  if (appState.exemptions === "med_religious") {
+  if (appState.exemptions === "med_relig") {
     vMandate += betaExMedRel;
-  } else if (appState.exemptions === "med_religious_personal") {
+  } else if (appState.exemptions === "med_relig_personal") {
     vMandate += betaExMedRelPers;
   }
 
@@ -397,8 +419,9 @@ function mapAttributesToUtilityTerms(modelParams) {
     vMandate += betaCov90;
   }
 
-  // Expected lives saved (per 100,000)
-  vMandate += betaLives * appState.livesSaved;
+  // Expected lives saved (per 100,000) – map to nearest design level
+  const livesDesign = mapLivesToDesignLevel(appState.livesSaved);
+  vMandate += betaLives * livesDesign;
 
   return { vMandate, vOptOut };
 }
@@ -534,7 +557,7 @@ function computeBenefits(uptake) {
 }
 
 /* -----------------------------------------------------
-   COST MODULE (UI-driven toggles)
+   COST MODULE (UI-driven toggles + SA multipliers)
 ----------------------------------------------------- */
 
 function isChecked(id) {
@@ -542,8 +565,24 @@ function isChecked(id) {
   return !!(el && el.checked);
 }
 
+function getSensitivityMultipliers() {
+  const costSlider = document.getElementById("sa-cost-multiplier");
+  const employerSlider = document.getElementById("sa-employer-multiplier");
+  const costMultiplier = costSlider ? Number(costSlider.value || 1) : 1;
+  const employerMultiplier = employerSlider
+    ? Number(employerSlider.value || 1)
+    : 1;
+  return {
+    costMultiplier: Number.isFinite(costMultiplier) ? costMultiplier : 1,
+    employerMultiplier: Number.isFinite(employerMultiplier)
+      ? employerMultiplier
+      : 1
+  };
+}
+
 function computeCosts(uptake, benefits) {
   const pop = appState.population;
+  const { costMultiplier, employerMultiplier } = getSensitivityMultipliers();
 
   // PUBLIC-SECTOR COSTS (fixed, included only if checked)
   const policyDrafting = isChecked("cost-policy-drafting") ? 200_000 : 0;
@@ -553,13 +592,15 @@ function computeCosts(uptake, benefits) {
   const exemptionProcessing = 500_000; // baked into enforcement / admin
   const vaccCapacity = isChecked("cost-vacc-capacity") ? 600_000 : 0;
 
-  const publicSectorFixed =
+  let publicSectorFixed =
     policyDrafting +
     commsCampaign +
     itSystems +
     enforcement +
     exemptionProcessing +
     vaccCapacity;
+
+  publicSectorFixed *= costMultiplier;
 
   // Vaccination programme variable cost (only if procurement etc. toggled)
   const includeProgrammeCosts =
@@ -579,7 +620,8 @@ function computeCosts(uptake, benefits) {
     doseCost = base;
   }
 
-  const programmeVariableCosts = benefits.additionalVaccinated * doseCost;
+  let programmeVariableCosts = benefits.additionalVaccinated * doseCost;
+  programmeVariableCosts *= costMultiplier;
 
   // EMPLOYER-SIDE COSTS
   const shareWorkforceTargeted =
@@ -591,25 +633,27 @@ function computeCosts(uptake, benefits) {
   if (isChecked("cost-pto-vax")) employerCostPerWorker += 40;
   if (isChecked("cost-testing")) employerCostPerWorker += 25;
 
-  const employerCosts =
+  let employerCosts =
     pop * shareWorkforceTargeted * workingAgeShare * employerCostPerWorker;
+  employerCosts *= employerMultiplier;
 
   // Attrition costs
   const attritionRate = appState.scope === "high_risk" ? 0.005 : 0.015;
-  const replacementCostPerWorker = 20_000;
-  const attritionCosts = isChecked("cost-attrition")
+  let attritionCosts = isChecked("cost-attrition")
     ? pop *
       shareWorkforceTargeted *
       workingAgeShare *
       attritionRate *
-      replacementCostPerWorker
+      20_000
     : 0;
+  attritionCosts *= employerMultiplier;
 
   // Social / political costs (simple monetised placeholders)
   let socialCosts = 0;
   if (isChecked("cost-trust")) socialCosts += 500_000;
   if (isChecked("cost-protests")) socialCosts += 400_000;
   if (isChecked("cost-unmet-care")) socialCosts += 300_000;
+  socialCosts *= costMultiplier;
 
   const totalProgrammeCosts =
     publicSectorFixed +
@@ -696,7 +740,6 @@ function computeEquity(benefits, economics) {
     eqWeightedQALY * getCountryMeta().valuePerQALY - economics.totalCosts;
 
   // "Concentration index" placeholder (higher benefits to low SES -> negative CI)
-  // Here we just derive a simple sign based on shareLow minus shareHigh
   const concentrationIndex = (shareHigh - shareLow) * 0.2;
 
   return {
@@ -1081,7 +1124,7 @@ function initCharts() {
   }
 }
 
-function updateCharts(uptake, benefits, economics, equity) {
+function updateCharts(uptake, benefits, economics, equity, costs) {
   // Uptake by class
   if (chartUptakeByClass) {
     chartUptakeByClass.data.datasets[0].data = [
@@ -1104,17 +1147,14 @@ function updateCharts(uptake, benefits, economics, equity) {
     chartBenefits.update();
   }
 
-  // Cost breakdown
-  if (chartCostBreakdown) {
+  // Cost breakdown – use actual cost components
+  if (chartCostBreakdown && costs) {
     chartCostBreakdown.data.datasets[0].data = [
-      economics.totalCosts
-        ? economics.totalCosts -
-          (equity ? equity.equityAdjustedNMB / 10 : 0)
-        : 0, // crude dev
-      benefits.additionalVaccinated, // just for a sense of scale
-      0,
-      0,
-      0
+      costs.publicSectorFixed,
+      costs.programmeVariableCosts,
+      costs.employerCosts,
+      costs.attritionCosts,
+      costs.socialCosts
     ];
     chartCostBreakdown.update();
   }
@@ -1348,7 +1388,7 @@ function exportPolicyBrief() {
         <tr><th>Exemptions</th><td>${
           appState.exemptions === "med_only"
             ? "Medical only"
-            : appState.exemptions === "med_religious"
+            : appState.exemptions === "med_relig"
             ? "Medical + religious"
             : "Medical + religious + personal belief"
         }</td></tr>
@@ -1357,7 +1397,7 @@ function exportPolicyBrief() {
         }% of population vaccinated</td></tr>
         <tr><th>Expected lives saved</th><td>${
           appState.livesSaved
-        } per 100,000 population</td></tr>
+        } per 100,000 population (mapped to design levels 10/25/35/40)</td></tr>
       </table>
 
       <h2>DCE Predicted Uptake</h2>
@@ -1645,7 +1685,7 @@ function renderAll() {
     "db-exemptions",
     appState.exemptions === "med_only"
       ? "Medical only"
-      : appState.exemptions === "med_religious"
+      : appState.exemptions === "med_relig"
       ? "Medical + religious"
       : "Medical + religious + personal belief"
   );
@@ -1783,7 +1823,7 @@ function renderAll() {
   renderDescriptiveStats();
 
   // Charts
-  updateCharts(uptake, benefits, economics, equity);
+  updateCharts(uptake, benefits, economics, equity, costs);
 
   // Saved scenarios list stays as-is; user triggers explicitly
 }
@@ -1854,7 +1894,6 @@ function initControls() {
         buttons.forEach((b) => b.classList.remove("active"));
         btn.classList.add("active");
         appState.outbreak = btn.dataset.value || "mild";
-        // Update helper text is handled in HTML; no change needed here
         renderAll();
       });
     });
